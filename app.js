@@ -112,6 +112,7 @@ function getAnswerValue(qid) {
   return checked ? Number(checked.value) : null;
 }
 
+// PDF-safe
 function getAnswerLabelSafe(qid) {
   const v = getAnswerValue(qid);
   if (v === 3) return "++";
@@ -276,12 +277,11 @@ async function buildAxisPresentation(scores) {
   }));
 
   const axisIcons = await Promise.all(AXIS_KEYS.map((k) => loadImage(intelMap.get(k).icon)));
-
   return { axisLabels, axisValues, axisPairs, axisIcons };
 }
 
 // ---------------------------------------------------------
-// Radar Plugin: dicke Achsen + farbige Labels/Werte + grosse Schrift
+// Radar Plugin: NUR Labels + Werte (keine extra Achsen!)
 // ---------------------------------------------------------
 function buildRadarPlugin(axisLabels, axisIcons) {
   return {
@@ -295,25 +295,9 @@ function buildRadarPlugin(axisLabels, axisIcons) {
       const centerY = scale.yCenter;
       const outerR = scale.drawingArea;
 
-      // 1) dicke, farbige radiale Achsen
+      // Aussenlabels (gross + farbig) + Icons (nur UI)
       ctx.save();
-      for (let i = 0; i < axisLabels.length; i++) {
-        const angle = scale.getIndexAngle(i);
-        const x = centerX + Math.cos(angle) * outerR;
-        const y = centerY + Math.sin(angle) * outerR;
-
-        ctx.beginPath();
-        ctx.moveTo(centerX, centerY);
-        ctx.lineTo(x, y);
-        ctx.lineWidth = 2.6;
-        ctx.strokeStyle = withAlpha(AXIS_COLORS[i], 0.55);
-        ctx.stroke();
-      }
-      ctx.restore();
-
-      // 2) Aussenlabels (gross + farbig) + Icons (nur UI)
-      ctx.save();
-      ctx.font = "600 14px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
+      ctx.font = "700 14px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
       ctx.textBaseline = "middle";
 
       const labelOffset = 40;
@@ -342,19 +326,19 @@ function buildRadarPlugin(axisLabels, axisIcons) {
       }
       ctx.restore();
 
-      // 3) Innenwerte (farbig + gut lesbar)
+      // Innenwerte (farbig, exakt auf dem Punkt)
       const dataset = chart.data.datasets[0].data;
 
       ctx.save();
-      ctx.font = "700 12px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
+      ctx.font = "800 12px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
 
       for (let i = 0; i < dataset.length; i++) {
         const v = dataset[i];
         const pt = scale.getPointPositionForValue(i, v);
-        const text = String(v);
 
+        const text = String(v);
         const metrics = ctx.measureText(text);
         const w = metrics.width + 14;
         const h = 18;
@@ -363,8 +347,8 @@ function buildRadarPlugin(axisLabels, axisIcons) {
         const r = 7;
 
         ctx.save();
-        ctx.fillStyle = "rgba(255,255,255,0.92)";
-        ctx.strokeStyle = withAlpha(AXIS_COLORS[i], 0.60);
+        ctx.fillStyle = "rgba(255,255,255,0.94)";
+        ctx.strokeStyle = withAlpha(AXIS_COLORS[i], 0.65);
         ctx.lineWidth = 1.3;
 
         ctx.beginPath();
@@ -392,15 +376,15 @@ function buildRadarPlugin(axisLabels, axisIcons) {
 }
 
 // ---------------------------------------------------------
-// Radar rendern
+// Radar rendern – Achsen/SpiderWeb sind Chart.js-eigen (stimmig)
 // ---------------------------------------------------------
 async function renderRadar(axisLabels, axisValues, axisIcons) {
-  const ctx = document.getElementById("radar");
+  const canvas = document.getElementById("radar");
   if (chart) chart.destroy();
 
   const plugin = buildRadarPlugin(axisLabels, axisIcons);
 
-  chart = new Chart(ctx, {
+  chart = new Chart(canvas, {
     type: "radar",
     data: {
       labels: axisLabels.map(() => ""),
@@ -420,30 +404,35 @@ async function renderRadar(axisLabels, axisValues, axisIcons) {
       maintainAspectRatio: false,
       animation: { duration: 0 },
 
-      // Viel Platz, damit niemals etwas abgeschnitten wird
+      // Platz, damit Labels nie abgeschnitten werden
       layout: { padding: { top: 72, right: 92, bottom: 72, left: 92 } },
 
       scales: {
         r: {
           min: 0,
           max: 100,
-          startAngle: -90,
+          startAngle: -90, // Index 0 = 12 Uhr (Definition)
 
           grid: {
             circular: true,
             lineWidth: 1.2,
             color: "rgba(0,0,0,0.08)"
           },
+
+          // ✅ DAS sind die echten Radar-Achsen – hier machen wir sie dick & farbig
           angleLines: {
-            lineWidth: 1,
-            color: "rgba(0,0,0,0.06)"
+            display: true,
+            lineWidth: (ctx) => 2.6,
+            color: (ctx) => withAlpha(AXIS_COLORS[ctx.index], 0.55),
           },
+
           ticks: {
             stepSize: 20,
             backdropColor: "rgba(255,255,255,0.85)",
             color: "rgba(0,0,0,0.45)",
             font: { size: 11, weight: "600" }
           },
+
           pointLabels: { display: false }
         }
       },
@@ -456,7 +445,7 @@ async function renderRadar(axisLabels, axisValues, axisIcons) {
 }
 
 // ---------------------------------------------------------
-// Ergebnis anzeigen (Liste exakt wie Spider-Reihenfolge)
+// Ergebnis anzeigen
 // ---------------------------------------------------------
 async function showResult(scores) {
   const name = document.getElementById("studentName").value.trim() || "Ohne Name";
@@ -497,7 +486,7 @@ async function showResult(scores) {
 }
 
 // ---------------------------------------------------------
-// PDF Export (Spider + Tabelle exakt identisch)
+// PDF Export – Boxen kleiner, damit alles auf Seite 1 passt
 // ---------------------------------------------------------
 async function exportProfessionalPdf() {
   const name = document.getElementById("studentName").value.trim() || "OhneName";
@@ -508,7 +497,7 @@ async function exportProfessionalPdf() {
   const { axisLabels, axisValues, axisPairs } = await buildAxisPresentation(scores);
 
   __EXPORTING_PDF__ = true;
-  await renderRadar(axisLabels, axisValues, null);
+  await renderRadar(axisLabels, axisValues, null); // keine Icons im PDF
   await new Promise((r) => requestAnimationFrame(() => r()));
 
   const picksSorted = scores.picks
@@ -538,7 +527,7 @@ async function exportProfessionalPdf() {
         c.getContext("2d").drawImage(logoImg, 0, 0);
 
         const logoW = 46;
-        const logoH = logoW * (70 / 390);
+        const logoH = logoW * (70 / 390); // 390x70 proportional
         pdf.addImage(c.toDataURL("image/png"), "PNG", 10, 8, logoW, logoH);
       }
     } catch (_) {}
@@ -556,23 +545,25 @@ async function exportProfessionalPdf() {
 
   await addHeader("Interessenprofil nach Gardner-Intelligenzen");
 
+  // ✅ kleiner: Schüler*in Box (war 26mm hoch)
   pdf.setDrawColor(220);
   pdf.setFillColor(255, 255, 255);
-  pdf.roundedRect(10, 32, pageW - 20, 26, 3, 3, "FD");
+  pdf.roundedRect(10, 32, pageW - 20, 18, 3, 3, "FD");
 
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(12);
   pdf.setTextColor(17, 24, 39);
-  pdf.text("Schüler*in", 14, 40);
+  pdf.text("Schüler*in", 14, 39);
 
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(11);
   pdf.setTextColor(55, 65, 81);
-  pdf.text(`Name: ${name}`, 14, 47);
-  pdf.text(`Klasse: ${cls}`, 80, 47);
-  pdf.text(`Datum: ${dateStr}`, 140, 47);
+  pdf.text(`Name: ${name}`, 14, 46);
+  pdf.text(`Klasse: ${cls}`, 80, 46);
+  pdf.text(`Datum: ${dateStr}`, 140, 46);
 
-  pdf.setFontSize(10);
+  // Erklärung etwas höher platzieren
+  pdf.setFontSize(9.5);
   pdf.setTextColor(75, 85, 99);
   pdf.text(
     pdf.splitTextToSize(
@@ -581,41 +572,41 @@ async function exportProfessionalPdf() {
       pageW - 20
     ),
     10,
-    66
+    56
   );
 
-  // Radar-Bild
+  // Spider etwas kompakter
   const radarCanvas = document.getElementById("radar");
   const radarImg = radarCanvas.toDataURL("image/png");
 
   pdf.setDrawColor(229, 231, 235);
   pdf.setFillColor(249, 250, 251);
-  pdf.roundedRect(10, 74, pageW - 20, 96, 3, 3, "FD");
-  pdf.addImage(radarImg, "PNG", 18, 78, pageW - 36, 88);
+  pdf.roundedRect(10, 64, pageW - 20, 86, 3, 3, "FD");
+  pdf.addImage(radarImg, "PNG", 18, 66, pageW - 36, 82);
 
-  // Projekte
+  // ✅ kleiner: Projekte Box (war 40mm hoch)
   pdf.setDrawColor(229, 231, 235);
   pdf.setFillColor(255, 255, 255);
-  pdf.roundedRect(10, 174, pageW - 20, 40, 3, 3, "FD");
+  pdf.roundedRect(10, 152, pageW - 20, 30, 3, 3, "FD");
 
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(11);
   pdf.setTextColor(17, 24, 39);
-  pdf.text("Projektwahlen", 14, 182);
+  pdf.text("Projektwahlen", 14, 160);
 
   pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(10);
+  pdf.setFontSize(9.5);
   pdf.setTextColor(55, 65, 81);
-  pdf.text((picksSorted.length ? picksSorted : ["—"]), 14, 190);
+  pdf.text((picksSorted.length ? picksSorted : ["—"]), 14, 167);
 
-  // Tabelle: exakt axisPairs (Spider-Reihenfolge)
+  // Tabelle: so setzen, dass alle 9 Zeilen auf Seite 1 passen
   const rows = axisPairs.map((x) => [x.label, String(x.value)]);
   pdf.autoTable({
-    startY: 218,
+    startY: 186,
     head: [["Gardner-Bereich (Reihenfolge wie Spider-Web)", "Wert (0–100)"]],
     body: rows,
     theme: "grid",
-    styles: { font: "helvetica", fontSize: 9, cellPadding: 2 },
+    styles: { font: "helvetica", fontSize: 8.5, cellPadding: 1.6 },
     headStyles: { fillColor: [17, 24, 39], textColor: 255 },
     margin: { left: 10, right: 10 },
   });
