@@ -281,7 +281,7 @@ async function buildAxisPresentation(scores) {
 }
 
 // ---------------------------------------------------------
-// Radar Plugin: NUR Labels + Werte (keine extra Achsen!)
+// Radar Plugin: NUR Labels + Werte (Labels exakt auf echter Achse!)
 // ---------------------------------------------------------
 function buildRadarPlugin(axisLabels, axisIcons) {
   return {
@@ -291,26 +291,29 @@ function buildRadarPlugin(axisLabels, axisIcons) {
       const scale = chart.scales.r;
       if (!scale) return;
 
-      const centerX = scale.xCenter;
-      const centerY = scale.yCenter;
-      const outerR = scale.drawingArea;
-
-      // Aussenlabels (gross + farbig) + Icons (nur UI)
+      // 2) Aussenlabels (exakt auf der echten Achse) + Icons (nur UI)
       ctx.save();
       ctx.font = "700 14px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
       ctx.textBaseline = "middle";
 
-      const labelOffset = 40;
+      const pushOut = 22; // Abstand nach aussen (px)
       const iconSize = 16;
       const iconGap = 7;
 
       for (let i = 0; i < axisLabels.length; i++) {
-        const angle = scale.getIndexAngle(i);
-        const x = centerX + Math.cos(angle) * (outerR + labelOffset);
-        const y = centerY + Math.sin(angle) * (outerR + labelOffset);
+        // Punkt auf der *echten* Radar-Achse bei max
+        const pt = scale.getPointPositionForValue(i, scale.max);
 
-        const c = Math.cos(angle);
-        const align = c > 0.15 ? "left" : c < -0.15 ? "right" : "center";
+        // Richtung Zentrum -> Achse
+        const dx = pt.x - scale.xCenter;
+        const dy = pt.y - scale.yCenter;
+        const len = Math.hypot(dx, dy) || 1;
+
+        // Label noch etwas nach aussen schieben
+        const x = pt.x + (dx / len) * pushOut;
+        const y = pt.y + (dy / len) * pushOut;
+
+        const align = Math.abs(dx / len) < 0.15 ? "center" : (dx > 0 ? "left" : "right");
         ctx.textAlign = align;
 
         const drawIcons = !__EXPORTING_PDF__ && axisIcons && axisIcons[i];
@@ -326,7 +329,7 @@ function buildRadarPlugin(axisLabels, axisIcons) {
       }
       ctx.restore();
 
-      // Innenwerte (farbig, exakt auf dem Punkt)
+      // 3) Innenwerte (farbig, exakt auf dem Punkt)
       const dataset = chart.data.datasets[0].data;
 
       ctx.save();
@@ -411,7 +414,7 @@ async function renderRadar(axisLabels, axisValues, axisIcons) {
         r: {
           min: 0,
           max: 100,
-          startAngle: -90, // Index 0 = 12 Uhr (Definition)
+          startAngle: -90, // Index 0 = 12 Uhr
 
           grid: {
             circular: true,
@@ -419,10 +422,10 @@ async function renderRadar(axisLabels, axisValues, axisIcons) {
             color: "rgba(0,0,0,0.08)"
           },
 
-          // ✅ DAS sind die echten Radar-Achsen – hier machen wir sie dick & farbig
+          // echte Achsen: dick & farbig
           angleLines: {
             display: true,
-            lineWidth: (ctx) => 2.6,
+            lineWidth: () => 2.6,
             color: (ctx) => withAlpha(AXIS_COLORS[ctx.index], 0.55),
           },
 
@@ -486,7 +489,7 @@ async function showResult(scores) {
 }
 
 // ---------------------------------------------------------
-// PDF Export – Boxen kleiner, damit alles auf Seite 1 passt
+// PDF Export – kleineres Layout, damit Seite 1 passt
 // ---------------------------------------------------------
 async function exportProfessionalPdf() {
   const name = document.getElementById("studentName").value.trim() || "OhneName";
@@ -545,7 +548,7 @@ async function exportProfessionalPdf() {
 
   await addHeader("Interessenprofil nach Gardner-Intelligenzen");
 
-  // ✅ kleiner: Schüler*in Box (war 26mm hoch)
+  // kleiner: Schüler*in Box
   pdf.setDrawColor(220);
   pdf.setFillColor(255, 255, 255);
   pdf.roundedRect(10, 32, pageW - 20, 18, 3, 3, "FD");
@@ -562,7 +565,6 @@ async function exportProfessionalPdf() {
   pdf.text(`Klasse: ${cls}`, 80, 46);
   pdf.text(`Datum: ${dateStr}`, 140, 46);
 
-  // Erklärung etwas höher platzieren
   pdf.setFontSize(9.5);
   pdf.setTextColor(75, 85, 99);
   pdf.text(
@@ -575,7 +577,7 @@ async function exportProfessionalPdf() {
     56
   );
 
-  // Spider etwas kompakter
+  // Radar
   const radarCanvas = document.getElementById("radar");
   const radarImg = radarCanvas.toDataURL("image/png");
 
@@ -584,7 +586,7 @@ async function exportProfessionalPdf() {
   pdf.roundedRect(10, 64, pageW - 20, 86, 3, 3, "FD");
   pdf.addImage(radarImg, "PNG", 18, 66, pageW - 36, 82);
 
-  // ✅ kleiner: Projekte Box (war 40mm hoch)
+  // kleiner: Projekte Box
   pdf.setDrawColor(229, 231, 235);
   pdf.setFillColor(255, 255, 255);
   pdf.roundedRect(10, 152, pageW - 20, 30, 3, 3, "FD");
@@ -599,7 +601,7 @@ async function exportProfessionalPdf() {
   pdf.setTextColor(55, 65, 81);
   pdf.text((picksSorted.length ? picksSorted : ["—"]), 14, 167);
 
-  // Tabelle: so setzen, dass alle 9 Zeilen auf Seite 1 passen
+  // Tabelle: 9 Zeilen müssen auf Seite 1 passen
   const rows = axisPairs.map((x) => [x.label, String(x.value)]);
   pdf.autoTable({
     startY: 186,
