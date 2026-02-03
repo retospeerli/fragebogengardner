@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Interessenfragebogen – Gardner Radar</title>
+  <title>Die Denkschule – Interessenfragebogen</title>
   <link rel="stylesheet" href="styles.css" />
 
   <!-- Chart.js -->
@@ -12,14 +12,18 @@
   <!-- PDF Export -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 </head>
 
 <body>
   <header class="top">
-    <h1>Was interessiert mich wirklich?</h1>
-    <p class="sub">
-      Onlinefragebogen mit Spider-Web-Auswertung (Gardner – 9 Intelligenzen) und PDF-Export.
-    </p>
+    <div class="brand">
+      <img src="assets/logo.png" alt="Logo Die Denkschule" class="brandLogo" />
+      <div>
+        <h1>Die Denkschule</h1>
+        <p class="sub">Interessenfragebogen mit Spider-Web-Auswertung & PDF-Export</p>
+      </div>
+    </div>
   </header>
 
   <main class="wrap">
@@ -34,7 +38,7 @@
         </label>
       </div>
       <p class="hint">
-        Tipp: Du kannst später pro Kind das PDF speichern oder ausdrucken.
+        Dieser Fragebogen zeigt eine Momentaufnahme deiner Interessen. Es gibt kein „richtig“ oder „falsch“.
       </p>
     </section>
 
@@ -42,20 +46,21 @@
       <h2>Teil 1: Aussagen</h2>
       <p class="hint">Kreuze bei jeder Aussage an, wie gut sie zu dir passt.</p>
 
-      <div id="questions"></div>
-
       <div class="legend">
-        <span>👍 = 3</span>
-        <span>🙂 = 2</span>
-        <span>😐 = 1</span>
-        <span>🙁 = 0</span>
+        <span><strong>👍</strong> = 3</span>
+        <span><strong>🙂</strong> = 2</span>
+        <span><strong>😐</strong> = 1</span>
+        <span><strong>🙁</strong> = 0</span>
       </div>
+
+      <div id="questions"></div>
     </section>
 
     <section class="card">
       <h2>Teil 2: Projekte (genau 3 auswählen und rangieren)</h2>
       <p class="hint">
-        Wähle genau 3 Projekte und ordne sie als 1., 2., 3. Wahl.
+        Wähle <strong>genau 3</strong> Projekte und ordne sie als <strong>1., 2., 3. Wahl</strong>.
+        Jede Rangzahl darf nur einmal vergeben werden.
       </p>
 
       <div id="projects"></div>
@@ -73,7 +78,7 @@
       <div id="resultHeader" class="resultHeader"></div>
 
       <div class="chartBox">
-        <canvas id="radar" width="600" height="420"></canvas>
+        <canvas id="radar" width="700" height="460"></canvas>
       </div>
 
       <div id="resultDetails" class="resultDetails"></div>
@@ -86,7 +91,7 @@
   </main>
 
   <footer class="foot">
-    <small>Lokale Auswertung im Browser – keine automatische Online-Speicherung.</small>
+    <small>Auswertung im Browser. Keine automatische Online-Speicherung.</small>
   </footer>
 
   <script src="data.js"></script>
