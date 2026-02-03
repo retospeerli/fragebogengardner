@@ -1,8 +1,6 @@
-// ===============================
-// Single Source of Truth: Achsen-Reihenfolge
-// Start 12 Uhr, im Uhrzeigersinn:
-// logisch, räumlich, körper, musikalisch, interpersonal, sprachlich, intrapersonal, existenziell, natur
-// ===============================
+// =========================================================
+// SINGLE SOURCE OF TRUTH: Achsen-Reihenfolge (Index 0 = 12 Uhr)
+// =========================================================
 const AXIS_KEYS = [
   "logisch",
   "raeumlich",
@@ -14,6 +12,27 @@ const AXIS_KEYS = [
   "exist",
   "natur",
 ];
+
+// Farbe pro Intelligenz (Index passt exakt zu AXIS_KEYS)
+const AXIS_COLORS = [
+  "#2563EB", // logisch
+  "#7C3AED", // räumlich
+  "#16A34A", // körper
+  "#DB2777", // musikalisch
+  "#F59E0B", // interpersonal
+  "#DC2626", // sprachlich
+  "#0EA5E9", // intrapersonal
+  "#64748B", // existenziell
+  "#059669", // natur
+];
+
+function withAlpha(hex, a) {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
 
 const SCALE = [
   { label: "👍", value: 3 },
@@ -38,9 +57,9 @@ const btnReset = document.getElementById("btnReset");
 let chart = null;
 let __EXPORTING_PDF__ = false;
 
-// ===============================
-// Validierung / Mapping
-// ===============================
+// ---------------------------------------------------------
+// Helpers / Validierung
+// ---------------------------------------------------------
 function buildIntelMap() {
   const map = new Map();
   for (const it of INTELLIGENCES) map.set(it.key, it);
@@ -50,33 +69,19 @@ function buildIntelMap() {
 function assertConsistency() {
   const intelMap = buildIntelMap();
 
-  // 1) AXIS_KEYS müssen in INTELLIGENCES existieren
   for (const k of AXIS_KEYS) {
-    if (!intelMap.has(k)) {
-      throw new Error(`INTELLIGENCES fehlt key="${k}". Achsen-Reihenfolge kann nicht stimmen.`);
-    }
+    if (!intelMap.has(k)) throw new Error(`INTELLIGENCES fehlt key="${k}"`);
   }
-
-  // 2) QUESTIONS intel keys müssen gültig sein
   for (const q of QUESTIONS) {
-    if (!intelMap.has(q.intel)) {
-      throw new Error(`QUESTIONS: unbekannter intel-key "${q.intel}" bei id="${q.id}".`);
-    }
+    if (!intelMap.has(q.intel)) throw new Error(`QUESTIONS: unbekannter intel-key "${q.intel}" bei "${q.id}"`);
   }
-
-  // 3) PROJECTS intels keys müssen gültig sein
   for (const p of PROJECTS) {
     for (const k of p.intels) {
-      if (!intelMap.has(k)) {
-        throw new Error(`PROJECTS: unbekannter intel-key "${k}" bei project="${p.id}".`);
-      }
+      if (!intelMap.has(k)) throw new Error(`PROJECTS: unbekannter intel-key "${k}" bei "${p.id}"`);
     }
   }
 }
 
-// ===============================
-// Helpers
-// ===============================
 function todayISO() {
   const d = new Date();
   const pad = (n) => String(n).padStart(2, "0");
@@ -107,7 +112,6 @@ function getAnswerValue(qid) {
   return checked ? Number(checked.value) : null;
 }
 
-// PDF-safe (ohne Emojis)
 function getAnswerLabelSafe(qid) {
   const v = getAnswerValue(qid);
   if (v === 3) return "++";
@@ -124,9 +128,9 @@ function validateAllAnswered() {
   return true;
 }
 
-// ===============================
-// Render: Fragen in zufälliger Reihenfolge
-// ===============================
+// ---------------------------------------------------------
+// Render: Fragen (randomisiert)
+// ---------------------------------------------------------
 function renderQuestionsRandom() {
   const randomizedQuestions = shuffleArray(QUESTIONS);
   elQ.innerHTML = "";
@@ -156,9 +160,9 @@ function renderQuestionsRandom() {
   }
 }
 
-// ===============================
-// Render: Projekte (1/2/3 Wahl exakt je einmal)
-// ===============================
+// ---------------------------------------------------------
+// Render: Projekte (1/2/3 strikt einzigartig)
+// ---------------------------------------------------------
 function renderProjects() {
   elP.innerHTML = "";
 
@@ -215,9 +219,9 @@ function validateExactlyThreeProjects(picks) {
   return null;
 }
 
-// ===============================
-// Scoring – garantiert konsistent zur AXIS_KEYS Reihenfolge
-// ===============================
+// ---------------------------------------------------------
+// Scoring (roh + normiert)
+// ---------------------------------------------------------
 function calcScores() {
   const raw = {};
   const max = {};
@@ -229,19 +233,16 @@ function calcScores() {
     countPerIntel[k] = 0;
   }
 
-  // Items
   for (const q of QUESTIONS) {
     const v = getAnswerValue(q.id);
     raw[q.intel] += v;
     countPerIntel[q.intel] += 1;
   }
 
-  // Max items
   for (const k of AXIS_KEYS) {
     max[k] = countPerIntel[k] * 3;
   }
 
-  // Project bonus
   const picks = getProjectRankings();
   for (const p of picks) {
     const pr = PROJECTS.find((x) => x.id === p.projectId);
@@ -249,10 +250,8 @@ function calcScores() {
     for (const ik of pr.intels) raw[ik] += bonus;
   }
 
-  // max bonus per intelligence: 3+2+1 = 6
-  for (const k of AXIS_KEYS) max[k] += 6;
+  for (const k of AXIS_KEYS) max[k] += 6; // 3+2+1
 
-  // Norm 0–100
   const norm = {};
   for (const k of AXIS_KEYS) {
     norm[k] = Math.round((raw[k] / max[k]) * 100);
@@ -261,9 +260,29 @@ function calcScores() {
   return { raw, max, norm, picks };
 }
 
-// ===============================
-// Radar: Plugin – Aussenlabels (optional Icons) + Innenwerte
-// ===============================
+// ---------------------------------------------------------
+// Zentrale Quelle für Labels/Werte (Radar + Liste + PDF)
+// ---------------------------------------------------------
+async function buildAxisPresentation(scores) {
+  const intelMap = buildIntelMap();
+
+  const axisLabels = AXIS_KEYS.map((k) => intelMap.get(k).label);
+  const axisValues = AXIS_KEYS.map((k) => scores.norm[k]);
+  const axisPairs = AXIS_KEYS.map((k, i) => ({
+    key: k,
+    label: axisLabels[i],
+    value: axisValues[i],
+    icon: intelMap.get(k).icon,
+  }));
+
+  const axisIcons = await Promise.all(AXIS_KEYS.map((k) => loadImage(intelMap.get(k).icon)));
+
+  return { axisLabels, axisValues, axisPairs, axisIcons };
+}
+
+// ---------------------------------------------------------
+// Radar Plugin: dicke Achsen + farbige Labels/Werte + grosse Schrift
+// ---------------------------------------------------------
 function buildRadarPlugin(axisLabels, axisIcons) {
   return {
     id: "outerLabelsAndInnerValues",
@@ -276,15 +295,30 @@ function buildRadarPlugin(axisLabels, axisIcons) {
       const centerY = scale.yCenter;
       const outerR = scale.drawingArea;
 
-      // Aussen: Labels (+ Icons nur im UI)
+      // 1) dicke, farbige radiale Achsen
       ctx.save();
-      ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
-      ctx.fillStyle = "#374151";
+      for (let i = 0; i < axisLabels.length; i++) {
+        const angle = scale.getIndexAngle(i);
+        const x = centerX + Math.cos(angle) * outerR;
+        const y = centerY + Math.sin(angle) * outerR;
+
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.lineTo(x, y);
+        ctx.lineWidth = 2.6;
+        ctx.strokeStyle = withAlpha(AXIS_COLORS[i], 0.55);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // 2) Aussenlabels (gross + farbig) + Icons (nur UI)
+      ctx.save();
+      ctx.font = "600 14px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
       ctx.textBaseline = "middle";
 
-      const labelOffset = 26;
-      const iconSize = 14;
-      const iconGap = 6;
+      const labelOffset = 40;
+      const iconSize = 16;
+      const iconGap = 7;
 
       for (let i = 0; i < axisLabels.length; i++) {
         const angle = scale.getIndexAngle(i);
@@ -295,9 +329,7 @@ function buildRadarPlugin(axisLabels, axisIcons) {
         const align = c > 0.15 ? "left" : c < -0.15 ? "right" : "center";
         ctx.textAlign = align;
 
-        // Icons: nur im UI; im Export aus
         const drawIcons = !__EXPORTING_PDF__ && axisIcons && axisIcons[i];
-
         if (drawIcons) {
           let iconX = x;
           if (align === "left") iconX = x - (iconSize + iconGap);
@@ -305,36 +337,35 @@ function buildRadarPlugin(axisLabels, axisIcons) {
           ctx.drawImage(axisIcons[i], iconX, y - iconSize / 2, iconSize, iconSize);
         }
 
+        ctx.fillStyle = AXIS_COLORS[i];
         ctx.fillText(axisLabels[i], x, y);
       }
       ctx.restore();
 
-      // Innen: Werte direkt an den Punkten
+      // 3) Innenwerte (farbig + gut lesbar)
       const dataset = chart.data.datasets[0].data;
 
       ctx.save();
-      ctx.font = "bold 12px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
-      ctx.fillStyle = "#111827";
+      ctx.font = "700 12px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
 
       for (let i = 0; i < dataset.length; i++) {
         const v = dataset[i];
         const pt = scale.getPointPositionForValue(i, v);
-
         const text = String(v);
+
         const metrics = ctx.measureText(text);
-        const w = metrics.width + 12;
-        const h = 16;
+        const w = metrics.width + 14;
+        const h = 18;
         const rx = pt.x - w / 2;
         const ry = pt.y - h / 2;
-        const r = 6;
+        const r = 7;
 
-        // kleine “Pille” hinter Zahl
         ctx.save();
-        ctx.fillStyle = "rgba(255,255,255,0.90)";
-        ctx.strokeStyle = "rgba(0,0,0,0.08)";
-        ctx.lineWidth = 1;
+        ctx.fillStyle = "rgba(255,255,255,0.92)";
+        ctx.strokeStyle = withAlpha(AXIS_COLORS[i], 0.60);
+        ctx.lineWidth = 1.3;
 
         ctx.beginPath();
         ctx.moveTo(rx + r, ry);
@@ -351,24 +382,19 @@ function buildRadarPlugin(axisLabels, axisIcons) {
         ctx.stroke();
         ctx.restore();
 
-        ctx.fillStyle = "#111827";
+        ctx.fillStyle = AXIS_COLORS[i];
         ctx.fillText(text, pt.x, pt.y);
       }
+
       ctx.restore();
     }
   };
 }
 
-async function renderRadar(scores) {
-  const intelMap = buildIntelMap();
-
-  // Achsenlabels und Daten in EXAKT derselben Reihenfolge:
-  const axisLabels = AXIS_KEYS.map((k) => intelMap.get(k).label);
-  const data = AXIS_KEYS.map((k) => scores.norm[k]);
-
-  // Icons (nur UI)
-  const axisIcons = await Promise.all(AXIS_KEYS.map((k) => loadImage(intelMap.get(k).icon)));
-
+// ---------------------------------------------------------
+// Radar rendern
+// ---------------------------------------------------------
+async function renderRadar(axisLabels, axisValues, axisIcons) {
   const ctx = document.getElementById("radar");
   if (chart) chart.destroy();
 
@@ -377,27 +403,47 @@ async function renderRadar(scores) {
   chart = new Chart(ctx, {
     type: "radar",
     data: {
-      // Labels leer lassen → wir zeichnen sie selbst perfekt kontrolliert
       labels: axisLabels.map(() => ""),
       datasets: [{
         label: "",
-        data,
-        borderWidth: 2,
+        data: axisValues,
+        borderWidth: 2.2,
+        borderColor: "rgba(37,99,235,0.85)",
+        backgroundColor: "rgba(37,99,235,0.12)",
         pointRadius: 3,
-        pointStyle: "circle",
+        pointBackgroundColor: "rgba(37,99,235,0.85)",
+        pointBorderColor: "rgba(37,99,235,0.85)",
       }],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       animation: { duration: 0 },
-      layout: { padding: { top: 18, right: 56, bottom: 18, left: 56 } },
+
+      // Viel Platz, damit niemals etwas abgeschnitten wird
+      layout: { padding: { top: 72, right: 92, bottom: 72, left: 92 } },
+
       scales: {
         r: {
           min: 0,
           max: 100,
-          startAngle: -90, // Index 0 bei 12 Uhr (saubere Definition, keine Mogelei)
-          ticks: { stepSize: 20 },
+          startAngle: -90,
+
+          grid: {
+            circular: true,
+            lineWidth: 1.2,
+            color: "rgba(0,0,0,0.08)"
+          },
+          angleLines: {
+            lineWidth: 1,
+            color: "rgba(0,0,0,0.06)"
+          },
+          ticks: {
+            stepSize: 20,
+            backdropColor: "rgba(255,255,255,0.85)",
+            color: "rgba(0,0,0,0.45)",
+            font: { size: 11, weight: "600" }
+          },
           pointLabels: { display: false }
         }
       },
@@ -409,13 +455,14 @@ async function renderRadar(scores) {
   chart.update("none");
 }
 
-// ===============================
-// Ergebnis anzeigen – Liste exakt in Spider-Reihenfolge
-// ===============================
+// ---------------------------------------------------------
+// Ergebnis anzeigen (Liste exakt wie Spider-Reihenfolge)
+// ---------------------------------------------------------
 async function showResult(scores) {
-  const intelMap = buildIntelMap();
   const name = document.getElementById("studentName").value.trim() || "Ohne Name";
   const cls = document.getElementById("studentClass").value.trim() || "—";
+
+  const { axisLabels, axisValues, axisPairs, axisIcons } = await buildAxisPresentation(scores);
 
   resultHeader.innerHTML = `
     <div><strong>${name}</strong></div>
@@ -423,7 +470,7 @@ async function showResult(scores) {
     <div>Datum: <strong>${todayISO()}</strong></div>
   `;
 
-  await renderRadar(scores);
+  await renderRadar(axisLabels, axisValues, axisIcons);
 
   const picksSorted = scores.picks
     .slice()
@@ -434,8 +481,8 @@ async function showResult(scores) {
     })
     .join("");
 
-  const valuesList = AXIS_KEYS
-    .map((k) => `<li>${intelMap.get(k).label}: <strong>${scores.norm[k]}</strong></li>`)
+  const valuesList = axisPairs
+    .map((x, i) => `<li style="color:${AXIS_COLORS[i]}">${x.label}: <strong>${x.value}</strong></li>`)
     .join("");
 
   resultDetails.innerHTML = `
@@ -449,21 +496,19 @@ async function showResult(scores) {
   resultCard.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// ===============================
-// PDF Export – wieder vollständig funktional
-// ===============================
+// ---------------------------------------------------------
+// PDF Export (Spider + Tabelle exakt identisch)
+// ---------------------------------------------------------
 async function exportProfessionalPdf() {
-  const intelMap = buildIntelMap();
-
   const name = document.getElementById("studentName").value.trim() || "OhneName";
   const cls = document.getElementById("studentClass").value.trim() || "Klasse";
   const dateStr = todayISO();
 
   const scores = calcScores();
+  const { axisLabels, axisValues, axisPairs } = await buildAxisPresentation(scores);
 
-  // Exportmodus: keine Icons ins Spider (stabil & sauber)
   __EXPORTING_PDF__ = true;
-  await renderRadar(scores);
+  await renderRadar(axisLabels, axisValues, null);
   await new Promise((r) => requestAnimationFrame(() => r()));
 
   const picksSorted = scores.picks
@@ -491,11 +536,10 @@ async function exportProfessionalPdf() {
         c.width = logoImg.width;
         c.height = logoImg.height;
         c.getContext("2d").drawImage(logoImg, 0, 0);
-        const logoData = c.toDataURL("image/png");
 
         const logoW = 46;
-        const logoH = logoW * (70 / 390); // 390x70 proportional
-        pdf.addImage(logoData, "PNG", 10, 8, logoW, logoH);
+        const logoH = logoW * (70 / 390);
+        pdf.addImage(c.toDataURL("image/png"), "PNG", 10, 8, logoW, logoH);
       }
     } catch (_) {}
 
@@ -510,7 +554,6 @@ async function exportProfessionalPdf() {
     pdf.text(pageTitle, 60, 20);
   }
 
-  // Cover
   await addHeader("Interessenprofil nach Gardner-Intelligenzen");
 
   pdf.setDrawColor(220);
@@ -531,12 +574,17 @@ async function exportProfessionalPdf() {
 
   pdf.setFontSize(10);
   pdf.setTextColor(75, 85, 99);
-  const expl =
-    "Dieses Interessenprofil basiert auf Antworten zu Aussagen sowie auf drei gewählten Projekten (1.–3. Wahl). " +
-    "Es zeigt eine Momentaufnahme deiner Interessen entlang der Gardner-Intelligenzen (Skala 0–100).";
-  pdf.text(pdf.splitTextToSize(expl, pageW - 20), 10, 66);
+  pdf.text(
+    pdf.splitTextToSize(
+      "Dieses Interessenprofil basiert auf Antworten zu Aussagen sowie auf drei gewählten Projekten (1.–3. Wahl). " +
+        "Es zeigt eine Momentaufnahme deiner Interessen entlang der Gardner-Intelligenzen (Skala 0–100).",
+      pageW - 20
+    ),
+    10,
+    66
+  );
 
-  // Spider
+  // Radar-Bild
   const radarCanvas = document.getElementById("radar");
   const radarImg = radarCanvas.toDataURL("image/png");
 
@@ -560,8 +608,8 @@ async function exportProfessionalPdf() {
   pdf.setTextColor(55, 65, 81);
   pdf.text((picksSorted.length ? picksSorted : ["—"]), 14, 190);
 
-  // Werte-Tabelle exakt in Spider-Reihenfolge (AXIS_KEYS)
-  const rows = AXIS_KEYS.map((k) => [intelMap.get(k).label, `${scores.norm[k]}`]);
+  // Tabelle: exakt axisPairs (Spider-Reihenfolge)
+  const rows = axisPairs.map((x) => [x.label, String(x.value)]);
   pdf.autoTable({
     startY: 218,
     head: [["Gardner-Bereich (Reihenfolge wie Spider-Web)", "Wert (0–100)"]],
@@ -579,15 +627,19 @@ async function exportProfessionalPdf() {
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(10);
   pdf.setTextColor(75, 85, 99);
-  const appInfo =
-    "Die Fragen wurden im Fragebogen absichtlich gemischt angezeigt. Für die Auswertung sind sie hier nach Bereichen sortiert.";
-  pdf.text(pdf.splitTextToSize(appInfo, pageW - 20), 10, 34);
+  pdf.text(
+    pdf.splitTextToSize(
+      "Die Fragen wurden im Fragebogen absichtlich gemischt angezeigt. Für die Auswertung sind sie hier nach Bereichen sortiert.",
+      pageW - 20
+    ),
+    10,
+    34
+  );
 
   let cursorY = 42;
 
-  for (const k of AXIS_KEYS) {
-    const intel = intelMap.get(k);
-    const qs = QUESTIONS.filter((q) => q.intel === k);
+  for (const x of axisPairs) {
+    const qs = QUESTIONS.filter((q) => q.intel === x.key);
     const body = qs.map((q) => [q.text, getAnswerLabelSafe(q.id), String(getAnswerValue(q.id))]);
 
     if (cursorY > pageH - 60) {
@@ -601,19 +653,19 @@ async function exportProfessionalPdf() {
     pdf.setFontSize(12);
 
     try {
-      const img = await loadImage(intel.icon);
+      const img = await loadImage(x.icon);
       if (img) {
         const c = document.createElement("canvas");
         c.width = img.width;
         c.height = img.height;
         c.getContext("2d").drawImage(img, 0, 0);
         pdf.addImage(c.toDataURL("image/png"), "PNG", 10, cursorY - 4, 6, 6);
-        pdf.text(intel.label, 18, cursorY);
+        pdf.text(x.label, 18, cursorY);
       } else {
-        pdf.text(intel.label, 10, cursorY);
+        pdf.text(x.label, 10, cursorY);
       }
     } catch (_) {
-      pdf.text(intel.label, 10, cursorY);
+      pdf.text(x.label, 10, cursorY);
     }
 
     cursorY += 4;
@@ -638,20 +690,19 @@ async function exportProfessionalPdf() {
 
   pdf.save(`Denkschule_Interessenprofil_${cls}_${name}.pdf`);
 
-  // UI-Modus zurück
   __EXPORTING_PDF__ = false;
-  await renderRadar(scores);
+
+  // UI-Radar wieder mit Icons
+  const { axisLabels: uiL, axisValues: uiV, axisIcons: uiI } = await buildAxisPresentation(scores);
+  await renderRadar(uiL, uiV, uiI);
 }
 
-// ===============================
+// ---------------------------------------------------------
 // Actions
-// ===============================
+// ---------------------------------------------------------
 btnCalc.addEventListener("click", async () => {
   elErr.textContent = "";
-
-  try {
-    assertConsistency();
-  } catch (e) {
+  try { assertConsistency(); } catch (e) {
     elErr.textContent = `Konfigurationsfehler: ${e.message}`;
     return;
   }
@@ -674,10 +725,7 @@ btnCalc.addEventListener("click", async () => {
 
 btnPdf.addEventListener("click", async () => {
   elErr.textContent = "";
-
-  try {
-    assertConsistency();
-  } catch (e) {
+  try { assertConsistency(); } catch (e) {
     elErr.textContent = `Konfigurationsfehler: ${e.message}`;
     return;
   }
@@ -694,7 +742,6 @@ btnPdf.addEventListener("click", async () => {
     return;
   }
 
-  // sicherstellen, dass Chart frisch ist
   const scores = calcScores();
   await showResult(scores);
   await exportProfessionalPdf();
@@ -717,8 +764,8 @@ btnReset.addEventListener("click", () => {
   window.scrollTo({ top: 0, behavior: "smooth" });
 });
 
-// ===============================
+// ---------------------------------------------------------
 // Init
-// ===============================
+// ---------------------------------------------------------
 renderQuestionsRandom();
 renderProjects();
