@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Die Denkschule – Interessenfragebogen</title>
+  <title>Die Denkschule – Interessenprofil (Gardner)</title>
   <link rel="stylesheet" href="styles.css" />
 
   <!-- Chart.js -->
@@ -21,7 +21,7 @@
       <img src="assets/logo.png" alt="Logo Die Denkschule" class="brandLogo" />
       <div>
         <h1>Die Denkschule</h1>
-        <p class="sub">Interessenfragebogen mit Spider-Web-Auswertung & PDF-Export</p>
+        <p class="sub">Interessenprofil nach Gardner-Intelligenzen · Spider-Web & PDF-Export</p>
       </div>
     </div>
   </header>
@@ -38,7 +38,7 @@
         </label>
       </div>
       <p class="hint">
-        Dieser Fragebogen zeigt eine Momentaufnahme deiner Interessen. Es gibt kein „richtig“ oder „falsch“.
+        Dieses Profil zeigt eine Momentaufnahme deiner Interessen. Es gibt kein „richtig“ oder „falsch“.
       </p>
     </section>
 
@@ -53,6 +53,7 @@
         <span><strong>🙁</strong> = 0</span>
       </div>
 
+      <!-- bewusst zufällige Reihenfolge, NICHT nach Intelligenz gruppiert -->
       <div id="questions"></div>
     </section>
 
@@ -60,7 +61,7 @@
       <h2>Teil 2: Projekte (genau 3 auswählen und rangieren)</h2>
       <p class="hint">
         Wähle <strong>genau 3</strong> Projekte und ordne sie als <strong>1., 2., 3. Wahl</strong>.
-        Jede Rangzahl darf nur einmal vergeben werden.
+        Jede Rangzahl darf nur <strong>einmal</strong> vergeben werden. Du kannst deine Wahl jederzeit ändern.
       </p>
 
       <div id="projects"></div>
@@ -78,7 +79,7 @@
       <div id="resultHeader" class="resultHeader"></div>
 
       <div class="chartBox">
-        <canvas id="radar" width="700" height="460"></canvas>
+        <canvas id="radar" width="760" height="520"></canvas>
       </div>
 
       <div id="resultDetails" class="resultDetails"></div>
