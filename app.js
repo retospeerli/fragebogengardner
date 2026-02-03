@@ -59,7 +59,6 @@ function getAnswerLabel(qid) {
   return found ? found.label : "—";
 }
 
-// PDF-safe (ohne Emojis)
 function getAnswerLabelSafe(qid) {
   const v = getAnswerValue(qid);
   if (v === 3) return "++";
@@ -76,7 +75,7 @@ function validateAllAnswered() {
   return true;
 }
 
-// ---------- Questions: randomized order ----------
+// ---------- Questions ----------
 function renderQuestionsRandom() {
   randomizedQuestions = shuffleArray(QUESTIONS);
   elQ.innerHTML = "";
@@ -106,7 +105,7 @@ function renderQuestionsRandom() {
   }
 }
 
-// ---------- Projects: strict unique ranks ----------
+// ---------- Projects ----------
 function renderProjects() {
   elP.innerHTML = "";
 
@@ -202,7 +201,7 @@ function calcScores() {
   return { raw, max, norm, picks };
 }
 
-// ---------- Radar plugin: labels/icons outside + values inside ----------
+// ---------- Radar ----------
 function buildRadarPlugin(iconImgs) {
   return {
     id: "outerLabelsAndInnerValues",
@@ -215,15 +214,13 @@ function buildRadarPlugin(iconImgs) {
       const centerY = scale.yCenter;
       const outerR = scale.drawingArea;
 
-      // Outside labels/icons
+      // outside labels
       ctx.save();
       ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
       ctx.fillStyle = "#374151";
       ctx.textBaseline = "middle";
 
       const labelOffset = 26;
-      const iconSize = 14;
-      const iconGap = 6;
 
       for (let i = 0; i < INTELLIGENCES.length; i++) {
         const angle = scale.getIndexAngle(i);
@@ -233,20 +230,11 @@ function buildRadarPlugin(iconImgs) {
         const c = Math.cos(angle);
         const align = c > 0.15 ? "left" : c < -0.15 ? "right" : "center";
         ctx.textAlign = align;
-
-        const drawIcons = !__EXPORTING_PDF__ && iconImgs && iconImgs[i];
-        if (drawIcons) {
-          let iconX = x;
-          if (align === "left") iconX = x - (iconSize + iconGap);
-          if (align === "right") iconX = x + iconGap;
-          ctx.drawImage(iconImgs[i], iconX, y - iconSize / 2, iconSize, iconSize);
-        }
-
         ctx.fillText(INTELLIGENCES[i].label, x, y);
       }
       ctx.restore();
 
-      // Inside values at data points
+      // inside values
       const dataset = chart.data.datasets[0].data;
 
       ctx.save();
@@ -258,40 +246,8 @@ function buildRadarPlugin(iconImgs) {
       for (let i = 0; i < dataset.length; i++) {
         const v = dataset[i];
         const pt = scale.getPointPositionForValue(i, v);
-
-        const text = String(v);
-        const metrics = ctx.measureText(text);
-        const w = metrics.width + 12;
-        const h = 16;
-
-        const rx = pt.x - w / 2;
-        const ry = pt.y - h / 2;
-        const r = 6;
-
-        ctx.save();
-        ctx.fillStyle = "rgba(255,255,255,0.90)";
-        ctx.strokeStyle = "rgba(0,0,0,0.08)";
-        ctx.lineWidth = 1;
-
-        ctx.beginPath();
-        ctx.moveTo(rx + r, ry);
-        ctx.lineTo(rx + w - r, ry);
-        ctx.quadraticCurveTo(rx + w, ry, rx + w, ry + r);
-        ctx.lineTo(rx + w, ry + h - r);
-        ctx.quadraticCurveTo(rx + w, ry + h, rx + w - r, ry + h);
-        ctx.lineTo(rx + r, ry + h);
-        ctx.quadraticCurveTo(rx, ry + h, rx, ry + h - r);
-        ctx.lineTo(rx, ry + r);
-        ctx.quadraticCurveTo(rx, ry, rx + r, ry);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-
-        ctx.fillStyle = "#111827";
-        ctx.fillText(text, pt.x, pt.y);
+        ctx.fillText(String(v), pt.x, pt.y);
       }
-
       ctx.restore();
     }
   };
@@ -299,23 +255,20 @@ function buildRadarPlugin(iconImgs) {
 
 async function renderRadar(scores) {
   const data = INTELLIGENCES.map((i) => scores.norm[i.key]);
-  const iconImgs = await Promise.all(INTELLIGENCES.map((i) => loadImage(i.icon)));
-
   const ctx = document.getElementById("radar");
   if (chart) chart.destroy();
 
-  const plugin = buildRadarPlugin(iconImgs);
+  const plugin = buildRadarPlugin();
 
   chart = new Chart(ctx, {
     type: "radar",
     data: {
       labels: INTELLIGENCES.map(() => ""),
       datasets: [{
-        label: "",                 // wichtig: kein Titel/Legend-Text
+        label: "",
         data,
         borderWidth: 2,
         pointRadius: 3,
-        pointStyle: "circle",
       }],
     },
     options: {
@@ -327,13 +280,12 @@ async function renderRadar(scores) {
         r: {
           min: 0,
           max: 100,
+          startAngle: -90,   // <<< KORREKTUR: Start bei 12 Uhr
           ticks: { stepSize: 20 },
           pointLabels: { display: false }
         }
       },
-      plugins: {
-        legend: { display: false }, // <<< entfernt den störenden Titel komplett
-      }
+      plugins: { legend: { display: false } }
     },
     plugins: [plugin]
   });
@@ -341,7 +293,7 @@ async function renderRadar(scores) {
   chart.update("none");
 }
 
-// ---------- Show result ----------
+// ---------- Result ----------
 async function showResult(scores) {
   const name = document.getElementById("studentName").value.trim() || "Ohne Name";
   const cls = document.getElementById("studentClass").value.trim() || "—";
@@ -376,199 +328,11 @@ async function showResult(scores) {
   resultCard.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// ---------- PDF Export ----------
-async function exportProfessionalPdf() {
-  const name = document.getElementById("studentName").value.trim() || "OhneName";
-  const cls = document.getElementById("studentClass").value.trim() || "Klasse";
-  const dateStr = todayISO();
-
-  const scores = calcScores();
-
-  __EXPORTING_PDF__ = true;
-  await renderRadar(scores);
-  await new Promise((r) => requestAnimationFrame(() => r()));
-
-  const picksSorted = scores.picks
-    .slice()
-    .sort((a, b) => Number(a.rank) - Number(b.rank))
-    .map((p) => {
-      const pr = PROJECTS.find((x) => x.id === p.projectId);
-      return `${p.rank}. Wahl: ${pr.name}`;
-    });
-
-  const { jsPDF } = window.jspdf;
-  const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-
-  const pageW = pdf.internal.pageSize.getWidth();
-  const pageH = pdf.internal.pageSize.getHeight();
-
-  async function addHeader(pageTitle) {
-    pdf.setFillColor(245, 247, 250);
-    pdf.rect(0, 0, pageW, 26, "F");
-
-    // Logo 390x70 -> Seitenverhältnis fix
-    try {
-      const logoImg = await loadImage("assets/logo.png");
-      if (logoImg) {
-        const c = document.createElement("canvas");
-        c.width = logoImg.width;
-        c.height = logoImg.height;
-        c.getContext("2d").drawImage(logoImg, 0, 0);
-        const logoData = c.toDataURL("image/png");
-
-        const logoW = 46;
-        const logoH = logoW * (70 / 390);
-        pdf.addImage(logoData, "PNG", 10, 8, logoW, logoH);
-      }
-    } catch (_) {}
-
-    pdf.setTextColor(17, 24, 39);
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(16);
-    pdf.text("Die Denkschule", 60, 14);
-
-    pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(11);
-    pdf.setTextColor(55, 65, 81);
-    pdf.text(pageTitle, 60, 20);
-  }
-
-  await addHeader("Interessenprofil nach Gardner-Intelligenzen");
-
-  pdf.setDrawColor(220);
-  pdf.setFillColor(255, 255, 255);
-  pdf.roundedRect(10, 32, pageW - 20, 26, 3, 3, "FD");
-
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(12);
-  pdf.setTextColor(17, 24, 39);
-  pdf.text("Schüler*in", 14, 40);
-
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(11);
-  pdf.setTextColor(55, 65, 81);
-  pdf.text(`Name: ${name}`, 14, 47);
-  pdf.text(`Klasse: ${cls}`, 80, 47);
-  pdf.text(`Datum: ${dateStr}`, 140, 47);
-
-  pdf.setFontSize(10);
-  pdf.setTextColor(75, 85, 99);
-  const expl =
-    "Dieses Interessenprofil basiert auf Antworten zu Aussagen sowie auf drei gewählten Projekten (1.–3. Wahl). " +
-    "Es zeigt eine Momentaufnahme deiner Interessen entlang der Gardner-Intelligenzen (Skala 0–100).";
-  pdf.text(pdf.splitTextToSize(expl, pageW - 20), 10, 66);
-
-  // Spider zentral
-  const radarCanvas = document.getElementById("radar");
-  const radarImg = radarCanvas.toDataURL("image/png");
-
-  pdf.setDrawColor(229, 231, 235);
-  pdf.setFillColor(249, 250, 251);
-  pdf.roundedRect(10, 74, pageW - 20, 96, 3, 3, "FD");
-  pdf.addImage(radarImg, "PNG", 18, 78, pageW - 36, 88);
-
-  // Projektwahlen
-  pdf.setDrawColor(229, 231, 235);
-  pdf.setFillColor(255, 255, 255);
-  pdf.roundedRect(10, 174, pageW - 20, 40, 3, 3, "FD");
-
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(11);
-  pdf.setTextColor(17, 24, 39);
-  pdf.text("Projektwahlen", 14, 182);
-
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(10);
-  pdf.setTextColor(55, 65, 81);
-  pdf.text((picksSorted.length ? picksSorted : ["—"]), 14, 190);
-
-  // Norm-Tabelle
-  const rows = INTELLIGENCES.map((i) => [i.label, `${scores.norm[i.key]}`]);
-  pdf.autoTable({
-    startY: 218,
-    head: [["Gardner-Bereich (Reihenfolge wie Spider-Web)", "Wert (0–100)"]],
-    body: rows,
-    theme: "grid",
-    styles: { font: "helvetica", fontSize: 9, cellPadding: 2 },
-    headStyles: { fillColor: [17, 24, 39], textColor: 255 },
-    margin: { left: 10, right: 10 },
-  });
-
-  // Anhang
-  pdf.addPage();
-  await addHeader("Anhang – Antworten nach Bereich");
-
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(10);
-  pdf.setTextColor(75, 85, 99);
-  const appInfo =
-    "Die Fragen wurden im Fragebogen absichtlich gemischt angezeigt. Für die Auswertung sind sie hier nach Bereichen sortiert.";
-  pdf.text(pdf.splitTextToSize(appInfo, pageW - 20), 10, 34);
-
-  let cursorY = 42;
-
-  for (const intel of INTELLIGENCES) {
-    const qs = QUESTIONS.filter((q) => q.intel === intel.key);
-    const body = qs.map((q) => [q.text, getAnswerLabelSafe(q.id), String(getAnswerValue(q.id))]);
-
-    if (cursorY > pageH - 60) {
-      pdf.addPage();
-      await addHeader("Anhang – Antworten nach Bereich");
-      cursorY = 34;
-    }
-
-    pdf.setTextColor(17, 24, 39);
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(12);
-
-    try {
-      const img = await loadImage(intel.icon);
-      if (img) {
-        const c = document.createElement("canvas");
-        c.width = img.width;
-        c.height = img.height;
-        c.getContext("2d").drawImage(img, 0, 0);
-        pdf.addImage(c.toDataURL("image/png"), "PNG", 10, cursorY - 4, 6, 6);
-        pdf.text(intel.label, 18, cursorY);
-      } else {
-        pdf.text(intel.label, 10, cursorY);
-      }
-    } catch (_) {
-      pdf.text(intel.label, 10, cursorY);
-    }
-
-    cursorY += 4;
-
-    pdf.autoTable({
-      startY: cursorY,
-      head: [["Aussage", "Antwort", "Punkte"]],
-      body,
-      theme: "grid",
-      styles: { font: "helvetica", fontSize: 8.5, cellPadding: 2, valign: "top" },
-      headStyles: { fillColor: [243, 244, 246], textColor: [17, 24, 39] },
-      columnStyles: {
-        0: { cellWidth: pageW - 20 - 18 - 14 },
-        1: { cellWidth: 18, halign: "center" },
-        2: { cellWidth: 14, halign: "center" },
-      },
-      margin: { left: 10, right: 10 },
-    });
-
-    cursorY = pdf.lastAutoTable.finalY + 10;
-  }
-
-  pdf.save(`Denkschule_Interessenprofil_${cls}_${name}.pdf`);
-
-  __EXPORTING_PDF__ = false;
-  await renderRadar(scores);
-}
-
 // ---------- Actions ----------
 btnCalc.addEventListener("click", async () => {
   elErr.textContent = "";
-
   if (!validateAllAnswered()) {
-    elErr.textContent = "Bitte beantworte alle Aussagen (jede Zeile ankreuzen).";
+    elErr.textContent = "Bitte beantworte alle Aussagen.";
     return;
   }
 
@@ -581,26 +345,6 @@ btnCalc.addEventListener("click", async () => {
 
   const scores = calcScores();
   await showResult(scores);
-});
-
-btnPdf.addEventListener("click", async () => {
-  elErr.textContent = "";
-
-  if (!validateAllAnswered()) {
-    elErr.textContent = "Für das PDF bitte zuerst alle Aussagen beantworten.";
-    return;
-  }
-
-  const picks = getProjectRankings();
-  const msg = validateExactlyThreeProjects(picks);
-  if (msg) {
-    elErr.textContent = msg;
-    return;
-  }
-
-  const scores = calcScores();
-  await showResult(scores);
-  await exportProfessionalPdf();
 });
 
 btnReset.addEventListener("click", () => {
