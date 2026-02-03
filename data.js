@@ -1,17 +1,18 @@
-// 9 Intelligenzen (Keys)
+// Reihenfolge im Radar (Start 12 Uhr, im Uhrzeigersinn):
+// logisch -> räumlich -> körper -> musikalisch -> interpersonal -> sprachlich -> intrapersonal -> existenziell -> naturbezogen
 const INTELLIGENCES = [
-  { key: "logisch", label: "Logisch-mathematisch" },
-  { key: "sprachlich", label: "Sprachlich" },
-  { key: "musikalisch", label: "Musikalisch" },
-  { key: "raeumlich", label: "Räumlich-visuell" },
-  { key: "koerper", label: "Körperlich-kinästhetisch" },
-  { key: "natur", label: "Naturbezogen" },
-  { key: "inter", label: "Interpersonal" },
-  { key: "intra", label: "Intrapersonal" },
-  { key: "exist", label: "Existenziell" },
+  { key: "logisch",    label: "Logisch-mathematisch",        icon: "assets/icons/logisch.png" },
+  { key: "raeumlich",  label: "Räumlich-visuell",            icon: "assets/icons/raeumlich.png" },
+  { key: "koerper",    label: "Körperlich-kinästhetisch",    icon: "assets/icons/koerper.png" },
+  { key: "musikalisch",label: "Musikalisch",                 icon: "assets/icons/musikalisch.png" },
+  { key: "inter",      label: "Interpersonal",               icon: "assets/icons/inter.png" },
+  { key: "sprachlich", label: "Sprachlich",                  icon: "assets/icons/sprachlich.png" },
+  { key: "intra",      label: "Intrapersonal",               icon: "assets/icons/intra.png" },
+  { key: "exist",      label: "Existenziell",                icon: "assets/icons/exist.png" },
+  { key: "natur",      label: "Naturbezogen",                icon: "assets/icons/natur.png" },
 ];
 
-// Items pro Intelligenz (hier: 6–8, du kannst erweitern)
+// Aussagen (6 pro Bereich als Start; du kannst jederzeit erweitern)
 const QUESTIONS = [
   // logisch
   { id:"l1", intel:"logisch", text:"Ich rechne gerne (plus, minus, mal, geteilt)." },
@@ -20,22 +21,6 @@ const QUESTIONS = [
   { id:"l4", intel:"logisch", text:"Ich arbeite gern mit geometrischen Formen." },
   { id:"l5", intel:"logisch", text:"Ich würde gern 3D-Druck und CAD ausprobieren." },
   { id:"l6", intel:"logisch", text:"Ich finde Muster in Zahlen spannend." },
-
-  // sprachlich
-  { id:"s1", intel:"sprachlich", text:"Ich lese gerne Bücher oder Comics." },
-  { id:"s2", intel:"sprachlich", text:"Ich schreibe gerne Geschichten oder Tagebuch." },
-  { id:"s3", intel:"sprachlich", text:"Ich erfinde gerne eigene Geschichten." },
-  { id:"s4", intel:"sprachlich", text:"Ich spiele gern Theater oder Rollenspiele." },
-  { id:"s5", intel:"sprachlich", text:"Ich erkläre anderen gern etwas." },
-  { id:"s6", intel:"sprachlich", text:"Ich spiele gern mit Wörtern." },
-
-  // musikalisch
-  { id:"m1", intel:"musikalisch", text:"Ich höre gerne Musik." },
-  { id:"m2", intel:"musikalisch", text:"Ich singe gerne." },
-  { id:"m3", intel:"musikalisch", text:"Ich merke mir Dinge gut mit Liedern." },
-  { id:"m4", intel:"musikalisch", text:"Ich mache gern Beats oder Rhythmus." },
-  { id:"m5", intel:"musikalisch", text:"Ich würde gern Hörspiele aufnehmen." },
-  { id:"m6", intel:"musikalisch", text:"Ich höre genau hin, wenn etwas klingt." },
 
   // räumlich
   { id:"r1", intel:"raeumlich", text:"Ich zeichne oder gestalte gern." },
@@ -53,15 +38,15 @@ const QUESTIONS = [
   { id:"k5", intel:"koerper", text:"Ich mag Making-Projekte." },
   { id:"k6", intel:"koerper", text:"Ich bin gern handwerklich tätig." },
 
-  // natur
-  { id:"n1", intel:"natur", text:"Ich bin gern draussen in der Natur." },
-  { id:"n2", intel:"natur", text:"Ich interessiere mich für Tiere." },
-  { id:"n3", intel:"natur", text:"Ich mag Experimente." },
-  { id:"n4", intel:"natur", text:"Ich würde gern mikroskopieren." },
-  { id:"n5", intel:"natur", text:"Ich finde Fossilien und Evolution spannend." },
-  { id:"n6", intel:"natur", text:"Ich mag Wasser- oder Waldforschung." },
+  // musikalisch
+  { id:"m1", intel:"musikalisch", text:"Ich höre gerne Musik." },
+  { id:"m2", intel:"musikalisch", text:"Ich singe gerne." },
+  { id:"m3", intel:"musikalisch", text:"Ich merke mir Dinge gut mit Liedern." },
+  { id:"m4", intel:"musikalisch", text:"Ich mache gern Beats oder Rhythmus." },
+  { id:"m5", intel:"musikalisch", text:"Ich würde gern Hörspiele aufnehmen." },
+  { id:"m6", intel:"musikalisch", text:"Ich höre genau hin, wenn etwas klingt." },
 
-  // inter
+  // interpersonal
   { id:"i1", intel:"inter", text:"Ich helfe gern anderen." },
   { id:"i2", intel:"inter", text:"Ich mag Gruppenarbeit." },
   { id:"i3", intel:"inter", text:"Ich erkläre anderen gern etwas." },
@@ -69,7 +54,15 @@ const QUESTIONS = [
   { id:"i5", intel:"inter", text:"Ich mag Teamprojekte." },
   { id:"i6", intel:"inter", text:"Ich kann gut zuhören." },
 
-  // intra
+  // sprachlich
+  { id:"s1", intel:"sprachlich", text:"Ich lese gerne Bücher oder Comics." },
+  { id:"s2", intel:"sprachlich", text:"Ich schreibe gerne Geschichten oder Tagebuch." },
+  { id:"s3", intel:"sprachlich", text:"Ich erfinde gerne eigene Geschichten." },
+  { id:"s4", intel:"sprachlich", text:"Ich spiele gern Theater oder Rollenspiele." },
+  { id:"s5", intel:"sprachlich", text:"Ich erkläre anderen gern etwas." },
+  { id:"s6", intel:"sprachlich", text:"Ich spiele gern mit Wörtern." },
+
+  // intrapersonal
   { id:"p1", intel:"intra", text:"Ich weiss gut, was ich mag." },
   { id:"p2", intel:"intra", text:"Ich denke über schwierige Fragen nach." },
   { id:"p3", intel:"intra", text:"Ich arbeite gern allein." },
@@ -77,16 +70,24 @@ const QUESTIONS = [
   { id:"p5", intel:"intra", text:"Ich reflektiere über mich." },
   { id:"p6", intel:"intra", text:"Ich setze mir Ziele." },
 
-  // exist
+  // existenziell
   { id:"e1", intel:"exist", text:"Ich interessiere mich für Geschichte." },
   { id:"e2", intel:"exist", text:"Ich mag Archäologie-Projekte." },
   { id:"e3", intel:"exist", text:"Ich denke über Gerechtigkeit nach." },
   { id:"e4", intel:"exist", text:"Ich frage oft nach dem «Warum»." },
   { id:"e5", intel:"exist", text:"Ich finde alte Kulturen spannend." },
   { id:"e6", intel:"exist", text:"Ich finde grosse Fragen spannend." },
+
+  // naturbezogen
+  { id:"n1", intel:"natur", text:"Ich bin gern draussen in der Natur." },
+  { id:"n2", intel:"natur", text:"Ich interessiere mich für Tiere." },
+  { id:"n3", intel:"natur", text:"Ich mag Experimente." },
+  { id:"n4", intel:"natur", text:"Ich würde gern mikroskopieren." },
+  { id:"n5", intel:"natur", text:"Ich finde Fossilien und Evolution spannend." },
+  { id:"n6", intel:"natur", text:"Ich mag Wasser- oder Waldforschung." },
 ];
 
-// Projekte: Jede Zeile hat die beteiligten Intelligenzen (mind. 3)
+// Projekte: intels = beteiligte Intelligenzen (mind. 3)
 const PROJECTS = [
   { id:"pr_robotik", name:"Roboter bauen & programmieren", tags:["Scratch/MakeCode/LEGO Spike/Arduino"], intels:["logisch","raeumlich","koerper","inter"] },
   { id:"pr_ki", name:"KI-Labor (Modelle trainieren & einbauen)", tags:["Teachable Machine/PictoBlox"], intels:["logisch","sprachlich","raeumlich","intra"] },
