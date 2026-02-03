@@ -21,6 +21,8 @@ const btnReset = document.getElementById("btnReset");
 let chart = null;
 let randomizedQuestions = [];
 
+let __EXPORTING_PDF__ = false; // beim Export: keine PNG-Zeichnungen im Spider, nur Text+Werte
+
 // ---------- Helpers ----------
 function todayISO() {
   const d = new Date();
@@ -37,6 +39,16 @@ function shuffleArray(arr) {
   return a;
 }
 
+async function loadImage(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
 function getAnswerValue(qid) {
   const checked = document.querySelector(`input[name="${qid}"]:checked`);
   return checked ? Number(checked.value) : null;
@@ -48,6 +60,16 @@ function getAnswerLabel(qid) {
   return found ? found.label : "—";
 }
 
+// PDF: Emojis vermeiden (jsPDF kann die in Standardfonts nicht sauber)
+function getAnswerLabelSafe(qid) {
+  const v = getAnswerValue(qid);
+  if (v === 3) return "++";
+  if (v === 2) return "+";
+  if (v === 1) return "o";
+  if (v === 0) return "-";
+  return "—";
+}
+
 function validateAllAnswered() {
   for (const q of QUESTIONS) {
     if (getAnswerValue(q.id) === null) return false;
@@ -55,7 +77,7 @@ function validateAllAnswered() {
   return true;
 }
 
-// ---------- Questions: randomized order (NOT grouped) ----------
+// ---------- Questions: randomized order ----------
 function renderQuestionsRandom() {
   randomizedQuestions = shuffleArray(QUESTIONS);
   elQ.innerHTML = "";
@@ -108,7 +130,7 @@ function renderProjects() {
       <option value="3">3. Wahl</option>
     `;
 
-    // Live enforcement: if a rank is chosen, remove it from others (by clearing duplicates)
+    // Live enforcement: nur eine 1/2/3
     sel.addEventListener("change", () => {
       const chosenRank = sel.value;
       if (!chosenRank) return;
@@ -116,9 +138,7 @@ function renderProjects() {
       const all = [...elP.querySelectorAll("select")];
       for (const other of all) {
         if (other === sel) continue;
-        if (other.value === chosenRank) {
-          other.value = ""; // clear duplicate rank
-        }
+        if (other.value === chosenRank) other.value = "";
       }
       elErr.textContent = "";
     });
@@ -189,17 +209,153 @@ function calcScores() {
   return { raw, max, norm, picks };
 }
 
-// ---------- Radar with icon point styles (best-effort) ----------
-async function loadImage(url) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = url;
-  });
+// ---------- Chart plugin: labels/icons outside + values inside ----------
+function buildRadarPlugin(iconImgs) {
+  return {
+    id: "outerLabelsAndInnerValues",
+    afterDraw(chart) {
+      const { ctx } = chart;
+      const scale = chart.scales.r;
+      if (!scale) return;
+
+      const centerX = scale.xCenter;
+      const centerY = scale.yCenter;
+      const outerR = scale.drawingArea;
+
+      // ----- OUTSIDE labels (and optionally icons) -----
+      ctx.save();
+      ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
+      ctx.fillStyle = "#374151";
+      ctx.textBaseline = "middle";
+
+      const labelOffset = 26;
+      const iconSize = 14; // halb so gross / unauffällig
+      const iconGap = 6;
+
+      for (let i = 0; i < INTELLIGENCES.length; i++) {
+        const angle = scale.getIndexAngle(i);
+        const x = centerX + Math.cos(angle) * (outerR + labelOffset);
+        const y = centerY + Math.sin(angle) * (outerR + labelOffset);
+
+        const c = Math.cos(angle);
+        const align = c > 0.15 ? "left" : c < -0.15 ? "right" : "center";
+        ctx.textAlign = align;
+
+        // icons only on screen (NOT when exporting PDF)
+        const drawIcons = !__EXPORTING_PDF__ && iconImgs && iconImgs[i];
+
+        if (drawIcons) {
+          let iconX = x;
+          if (align === "left") iconX = x - (iconSize + iconGap);
+          if (align === "right") iconX = x + iconGap;
+          ctx.drawImage(iconImgs[i], iconX, y - iconSize / 2, iconSize, iconSize);
+        }
+
+        ctx.fillText(INTELLIGENCES[i].label, x, y);
+      }
+      ctx.restore();
+
+      // ----- INSIDE values at data points -----
+      const dataset = chart.data.datasets[0].data;
+
+      ctx.save();
+      ctx.font = "bold 12px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
+      ctx.fillStyle = "#111827";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      for (let i = 0; i < dataset.length; i++) {
+        const v = dataset[i];
+        const pt = scale.getPointPositionForValue(i, v);
+
+        const text = String(v);
+        const metrics = ctx.measureText(text);
+        const w = metrics.width + 12;
+        const h = 16;
+
+        // small white pill background
+        const rx = pt.x - w / 2;
+        const ry = pt.y - h / 2;
+        const r = 6;
+
+        ctx.save();
+        ctx.fillStyle = "rgba(255,255,255,0.90)";
+        ctx.strokeStyle = "rgba(0,0,0,0.08)";
+        ctx.lineWidth = 1;
+
+        ctx.beginPath();
+        ctx.moveTo(rx + r, ry);
+        ctx.lineTo(rx + w - r, ry);
+        ctx.quadraticCurveTo(rx + w, ry, rx + w, ry + r);
+        ctx.lineTo(rx + w, ry + h - r);
+        ctx.quadraticCurveTo(rx + w, ry + h, rx + w - r, ry + h);
+        ctx.lineTo(rx + r, ry + h);
+        ctx.quadraticCurveTo(rx, ry + h, rx, ry + h - r);
+        ctx.lineTo(rx, ry + r);
+        ctx.quadraticCurveTo(rx, ry, rx + r, ry);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.fillStyle = "#111827";
+        ctx.fillText(text, pt.x, pt.y);
+      }
+
+      ctx.restore();
+    }
+  };
 }
 
+async function renderRadar(scores) {
+  const labels = INTELLIGENCES.map(() => ""); // wir zeichnen Labels selbst
+  const data = INTELLIGENCES.map((i) => scores.norm[i.key]);
+
+  // Icons laden (nur für UI, beim Export werden sie automatisch nicht gezeichnet)
+  const iconImgs = await Promise.all(INTELLIGENCES.map((i) => loadImage(i.icon)));
+
+  const ctx = document.getElementById("radar");
+  if (chart) chart.destroy();
+
+  const plugin = buildRadarPlugin(iconImgs);
+
+  chart = new Chart(ctx, {
+    type: "radar",
+    data: {
+      labels,
+      datasets: [{
+        label: "Profil (0–100)",
+        data,
+        borderWidth: 2,
+        pointRadius: 3,
+        pointStyle: "circle",
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 0 },     // wichtig fürs PDF
+      layout: {
+        padding: { top: 18, right: 56, bottom: 18, left: 56 }
+      },
+      scales: {
+        r: {
+          min: 0,
+          max: 100,
+          ticks: { stepSize: 20 },
+          pointLabels: { display: false }
+        }
+      },
+      plugins: { legend: { display: true } }
+    },
+    plugins: [plugin]
+  });
+
+  // einmal stabil rendern (wichtig fürs toDataURL im PDF)
+  chart.update("none");
+}
+
+// ---------- Show result ----------
 async function showResult(scores) {
   const name = document.getElementById("studentName").value.trim() || "Ohne Name";
   const cls = document.getElementById("studentClass").value.trim() || "—";
@@ -210,36 +366,7 @@ async function showResult(scores) {
     <div>Datum: <strong>${todayISO()}</strong></div>
   `;
 
-  const labels = INTELLIGENCES.map((i) => i.label);
-  const data = INTELLIGENCES.map((i) => scores.norm[i.key]);
-
-  const iconImgs = await Promise.all(INTELLIGENCES.map((i) => loadImage(i.icon)));
-  const hasAllIcons = iconImgs.every(Boolean);
-
-  const ctx = document.getElementById("radar");
-  if (chart) chart.destroy();
-
-  chart = new Chart(ctx, {
-    type: "radar",
-    data: {
-      labels,
-      datasets: [{
-        label: "Profil (0–100)",
-        data,
-        borderWidth: 2,
-        pointRadius: hasAllIcons ? 7 : 3,
-        pointStyle: hasAllIcons ? iconImgs : "circle",
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        r: { min: 0, max: 100, ticks: { stepSize: 20 } },
-      },
-      plugins: { legend: { display: true } },
-    },
-  });
+  await renderRadar(scores);
 
   const picksSorted = scores.picks
     .slice()
@@ -263,13 +390,19 @@ async function showResult(scores) {
   resultCard.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// ---------- Professional PDF (cover + appendix) ----------
+// ---------- Professional PDF ----------
 async function exportProfessionalPdf() {
   const name = document.getElementById("studentName").value.trim() || "OhneName";
   const cls = document.getElementById("studentClass").value.trim() || "Klasse";
   const dateStr = todayISO();
 
   const scores = calcScores();
+
+  // Beim Export: keine PNGs im Spider zeichnen (nur Text/Werte)
+  __EXPORTING_PDF__ = true;
+  await renderRadar(scores);
+  // 1 Frame warten, damit Canvas sicher „fertig“ ist
+  await new Promise((r) => requestAnimationFrame(() => r()));
 
   const picksSorted = scores.picks
     .slice()
@@ -289,7 +422,7 @@ async function exportProfessionalPdf() {
     pdf.setFillColor(245, 247, 250);
     pdf.rect(0, 0, pageW, 26, "F");
 
-    // Logo
+    // Logo (390x70 px) -> Seitenverhältnis beibehalten
     try {
       const logoImg = await loadImage("assets/logo.png");
       if (logoImg) {
@@ -298,25 +431,27 @@ async function exportProfessionalPdf() {
         c.height = logoImg.height;
         c.getContext("2d").drawImage(logoImg, 0, 0);
         const logoData = c.toDataURL("image/png");
-        pdf.addImage(logoData, "PNG", 10, 6, 14, 14);
+
+        const logoW = 46; // mm
+        const logoH = logoW * (70 / 390); // Seitenverhältnis
+        pdf.addImage(logoData, "PNG", 10, 8, logoW, logoH);
       }
     } catch (_) {}
 
     pdf.setTextColor(17, 24, 39);
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(16);
-    pdf.text("Die Denkschule", 28, 14);
+    pdf.text("Die Denkschule", 60, 14);
 
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(11);
     pdf.setTextColor(55, 65, 81);
-    pdf.text(pageTitle, 28, 20);
+    pdf.text(pageTitle, 60, 20);
   }
 
   // COVER
-  await addHeader("Intelligenzprofil – Momentaufnahme");
+  await addHeader("Interessenprofil nach Gardner-Intelligenzen");
 
-  // Student box
   pdf.setDrawColor(220);
   pdf.setFillColor(255, 255, 255);
   pdf.roundedRect(10, 32, pageW - 20, 26, 3, 3, "FD");
@@ -330,44 +465,48 @@ async function exportProfessionalPdf() {
   pdf.setFontSize(11);
   pdf.setTextColor(55, 65, 81);
   pdf.text(`Name: ${name}`, 14, 47);
-  pdf.text(`Klasse: ${cls}`, 70, 47);
-  pdf.text(`Datum: ${dateStr}`, 130, 47);
+  pdf.text(`Klasse: ${cls}`, 80, 47);
+  pdf.text(`Datum: ${dateStr}`, 140, 47);
 
-  // Explanation
+  // Erklärung
   pdf.setFontSize(10);
   pdf.setTextColor(75, 85, 99);
-  const expl = "Dieses Profil basiert auf Antworten zu Interessen-Aussagen sowie auf drei gewählten Projekten (1.–3. Wahl). Es zeigt bevorzugte Denk- und Lernzugänge als Momentaufnahme (0–100).";
+  const expl =
+    "Dieses Interessenprofil basiert auf Antworten zu Aussagen sowie auf drei gewählten Projekten (1.–3. Wahl). " +
+    "Es zeigt eine Momentaufnahme deiner Interessen entlang der Gardner-Intelligenzen (Skala 0–100).";
   pdf.text(pdf.splitTextToSize(expl, pageW - 20), 10, 66);
 
-  // Radar from canvas
+  // Spider-Web zentral (Canvas -> PNG)
   const radarCanvas = document.getElementById("radar");
   const radarImg = radarCanvas.toDataURL("image/png");
 
   pdf.setDrawColor(229, 231, 235);
   pdf.setFillColor(249, 250, 251);
-  pdf.roundedRect(10, 74, pageW - 20, 92, 3, 3, "FD");
-  pdf.addImage(radarImg, "PNG", 15, 78, pageW - 30, 84);
+  pdf.roundedRect(10, 74, pageW - 20, 96, 3, 3, "FD");
 
-  // Project choices
+  // zentral platzieren
+  pdf.addImage(radarImg, "PNG", 18, 78, pageW - 36, 88);
+
+  // Projektwahlen
   pdf.setDrawColor(229, 231, 235);
   pdf.setFillColor(255, 255, 255);
-  pdf.roundedRect(10, 170, pageW - 20, 40, 3, 3, "FD");
+  pdf.roundedRect(10, 174, pageW - 20, 40, 3, 3, "FD");
 
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(11);
   pdf.setTextColor(17, 24, 39);
-  pdf.text("Projektwahlen", 14, 178);
+  pdf.text("Projektwahlen", 14, 182);
 
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(10);
   pdf.setTextColor(55, 65, 81);
-  pdf.text((picksSorted.length ? picksSorted : ["—"]), 14, 186);
+  pdf.text((picksSorted.length ? picksSorted : ["—"]), 14, 190);
 
-  // Norm table (in the desired radar order = INTELLIGENCES order)
+  // Norm-Tabelle (in Spider-Reihenfolge)
   const rows = INTELLIGENCES.map((i) => [i.label, `${scores.norm[i.key]}`]);
   pdf.autoTable({
-    startY: 214,
-    head: [["Intelligenz (Reihenfolge wie Spider-Web)", "Wert (0–100)"]],
+    startY: 218,
+    head: [["Gardner-Bereich (Reihenfolge wie Spider-Web)", "Wert (0–100)"]],
     body: rows,
     theme: "grid",
     styles: { font: "helvetica", fontSize: 9, cellPadding: 2 },
@@ -382,14 +521,17 @@ async function exportProfessionalPdf() {
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(10);
   pdf.setTextColor(75, 85, 99);
-  const appInfo = "Die Fragen wurden im Fragebogen absichtlich gemischt angezeigt. Für die Auswertung sind sie hier nach Bereichen sortiert.";
+  const appInfo =
+    "Die Fragen wurden im Fragebogen absichtlich gemischt angezeigt. Für die Auswertung sind sie hier nach Bereichen sortiert.";
   pdf.text(pdf.splitTextToSize(appInfo, pageW - 20), 10, 34);
 
   let cursorY = 42;
 
   for (const intel of INTELLIGENCES) {
     const qs = QUESTIONS.filter((q) => q.intel === intel.key);
-    const body = qs.map((q) => [q.text, getAnswerLabel(q.id), String(getAnswerValue(q.id))]);
+
+    // PDF: keine Emojis (sonst Kauderwelsch), daher Safe-Labels
+    const body = qs.map((q) => [q.text, getAnswerLabelSafe(q.id), String(getAnswerValue(q.id))]);
 
     if (cursorY > pageH - 60) {
       pdf.addPage();
@@ -397,7 +539,7 @@ async function exportProfessionalPdf() {
       cursorY = 34;
     }
 
-    // Section title + icon
+    // Abschnittstitel + Icon
     pdf.setTextColor(17, 24, 39);
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(12);
@@ -438,7 +580,11 @@ async function exportProfessionalPdf() {
     cursorY = pdf.lastAutoTable.finalY + 10;
   }
 
-  pdf.save(`Denkschule_GardnerProfil_${cls}_${name}.pdf`);
+  pdf.save(`Denkschule_Interessenprofil_${cls}_${name}.pdf`);
+
+  // Exportmodus aus -> UI wieder mit Icons
+  __EXPORTING_PDF__ = false;
+  await renderRadar(scores);
 }
 
 // ---------- Actions ----------
@@ -476,7 +622,7 @@ btnPdf.addEventListener("click", async () => {
     return;
   }
 
-  // ensure chart exists
+  // ensure result visible (optional)
   const scores = calcScores();
   await showResult(scores);
   await exportProfessionalPdf();
@@ -492,8 +638,7 @@ btnReset.addEventListener("click", () => {
   if (chart) chart.destroy();
   chart = null;
 
-  // New random order after reset
-  renderQuestionsRandom();
+  renderQuestionsRandom(); // neue Random-Reihenfolge
   window.scrollTo({ top: 0, behavior: "smooth" });
 });
 
