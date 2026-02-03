@@ -20,8 +20,7 @@ const btnReset = document.getElementById("btnReset");
 
 let chart = null;
 let randomizedQuestions = [];
-
-let __EXPORTING_PDF__ = false; // beim Export: keine PNG-Zeichnungen im Spider, nur Text+Werte
+let __EXPORTING_PDF__ = false;
 
 // ---------- Helpers ----------
 function todayISO() {
@@ -60,7 +59,7 @@ function getAnswerLabel(qid) {
   return found ? found.label : "—";
 }
 
-// PDF: Emojis vermeiden (jsPDF kann die in Standardfonts nicht sauber)
+// PDF-safe (ohne Emojis)
 function getAnswerLabelSafe(qid) {
   const v = getAnswerValue(qid);
   if (v === 3) return "++";
@@ -107,7 +106,7 @@ function renderQuestionsRandom() {
   }
 }
 
-// ---------- Projects: strict unique ranks 1/2/3 ----------
+// ---------- Projects: strict unique ranks ----------
 function renderProjects() {
   elP.innerHTML = "";
 
@@ -130,7 +129,6 @@ function renderProjects() {
       <option value="3">3. Wahl</option>
     `;
 
-    // Live enforcement: nur eine 1/2/3
     sel.addEventListener("change", () => {
       const chosenRank = sel.value;
       if (!chosenRank) return;
@@ -177,19 +175,16 @@ function calcScores() {
     countPerIntel[intel.key] = 0;
   }
 
-  // Items
   for (const q of QUESTIONS) {
     const v = getAnswerValue(q.id);
     raw[q.intel] += v;
     countPerIntel[q.intel] += 1;
   }
 
-  // Max from items
   for (const intel of INTELLIGENCES) {
     max[intel.key] = countPerIntel[intel.key] * 3;
   }
 
-  // Projects bonus
   const picks = getProjectRankings();
   for (const p of picks) {
     const pr = PROJECTS.find((x) => x.id === p.projectId);
@@ -197,10 +192,8 @@ function calcScores() {
     for (const ik of pr.intels) raw[ik] += bonus;
   }
 
-  // allow up to +6 bonus per intelligence (3+2+1)
   for (const intel of INTELLIGENCES) max[intel.key] += 6;
 
-  // norm 0–100
   const norm = {};
   for (const intel of INTELLIGENCES) {
     norm[intel.key] = Math.round((raw[intel.key] / max[intel.key]) * 100);
@@ -209,7 +202,7 @@ function calcScores() {
   return { raw, max, norm, picks };
 }
 
-// ---------- Chart plugin: labels/icons outside + values inside ----------
+// ---------- Radar plugin: labels/icons outside + values inside ----------
 function buildRadarPlugin(iconImgs) {
   return {
     id: "outerLabelsAndInnerValues",
@@ -222,14 +215,14 @@ function buildRadarPlugin(iconImgs) {
       const centerY = scale.yCenter;
       const outerR = scale.drawingArea;
 
-      // ----- OUTSIDE labels (and optionally icons) -----
+      // Outside labels/icons
       ctx.save();
       ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
       ctx.fillStyle = "#374151";
       ctx.textBaseline = "middle";
 
       const labelOffset = 26;
-      const iconSize = 14; // halb so gross / unauffällig
+      const iconSize = 14;
       const iconGap = 6;
 
       for (let i = 0; i < INTELLIGENCES.length; i++) {
@@ -241,9 +234,7 @@ function buildRadarPlugin(iconImgs) {
         const align = c > 0.15 ? "left" : c < -0.15 ? "right" : "center";
         ctx.textAlign = align;
 
-        // icons only on screen (NOT when exporting PDF)
         const drawIcons = !__EXPORTING_PDF__ && iconImgs && iconImgs[i];
-
         if (drawIcons) {
           let iconX = x;
           if (align === "left") iconX = x - (iconSize + iconGap);
@@ -255,7 +246,7 @@ function buildRadarPlugin(iconImgs) {
       }
       ctx.restore();
 
-      // ----- INSIDE values at data points -----
+      // Inside values at data points
       const dataset = chart.data.datasets[0].data;
 
       ctx.save();
@@ -273,7 +264,6 @@ function buildRadarPlugin(iconImgs) {
         const w = metrics.width + 12;
         const h = 16;
 
-        // small white pill background
         const rx = pt.x - w / 2;
         const ry = pt.y - h / 2;
         const r = 6;
@@ -308,10 +298,7 @@ function buildRadarPlugin(iconImgs) {
 }
 
 async function renderRadar(scores) {
-  const labels = INTELLIGENCES.map(() => ""); // wir zeichnen Labels selbst
   const data = INTELLIGENCES.map((i) => scores.norm[i.key]);
-
-  // Icons laden (nur für UI, beim Export werden sie automatisch nicht gezeichnet)
   const iconImgs = await Promise.all(INTELLIGENCES.map((i) => loadImage(i.icon)));
 
   const ctx = document.getElementById("radar");
@@ -322,9 +309,9 @@ async function renderRadar(scores) {
   chart = new Chart(ctx, {
     type: "radar",
     data: {
-      labels,
+      labels: INTELLIGENCES.map(() => ""),
       datasets: [{
-        label: "Profil (0–100)",
+        label: "",                 // wichtig: kein Titel/Legend-Text
         data,
         borderWidth: 2,
         pointRadius: 3,
@@ -334,10 +321,8 @@ async function renderRadar(scores) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: { duration: 0 },     // wichtig fürs PDF
-      layout: {
-        padding: { top: 18, right: 56, bottom: 18, left: 56 }
-      },
+      animation: { duration: 0 },
+      layout: { padding: { top: 18, right: 56, bottom: 18, left: 56 } },
       scales: {
         r: {
           min: 0,
@@ -346,12 +331,13 @@ async function renderRadar(scores) {
           pointLabels: { display: false }
         }
       },
-      plugins: { legend: { display: true } }
+      plugins: {
+        legend: { display: false }, // <<< entfernt den störenden Titel komplett
+      }
     },
     plugins: [plugin]
   });
 
-  // einmal stabil rendern (wichtig fürs toDataURL im PDF)
   chart.update("none");
 }
 
@@ -390,7 +376,7 @@ async function showResult(scores) {
   resultCard.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// ---------- Professional PDF ----------
+// ---------- PDF Export ----------
 async function exportProfessionalPdf() {
   const name = document.getElementById("studentName").value.trim() || "OhneName";
   const cls = document.getElementById("studentClass").value.trim() || "Klasse";
@@ -398,10 +384,8 @@ async function exportProfessionalPdf() {
 
   const scores = calcScores();
 
-  // Beim Export: keine PNGs im Spider zeichnen (nur Text/Werte)
   __EXPORTING_PDF__ = true;
   await renderRadar(scores);
-  // 1 Frame warten, damit Canvas sicher „fertig“ ist
   await new Promise((r) => requestAnimationFrame(() => r()));
 
   const picksSorted = scores.picks
@@ -422,7 +406,7 @@ async function exportProfessionalPdf() {
     pdf.setFillColor(245, 247, 250);
     pdf.rect(0, 0, pageW, 26, "F");
 
-    // Logo (390x70 px) -> Seitenverhältnis beibehalten
+    // Logo 390x70 -> Seitenverhältnis fix
     try {
       const logoImg = await loadImage("assets/logo.png");
       if (logoImg) {
@@ -432,8 +416,8 @@ async function exportProfessionalPdf() {
         c.getContext("2d").drawImage(logoImg, 0, 0);
         const logoData = c.toDataURL("image/png");
 
-        const logoW = 46; // mm
-        const logoH = logoW * (70 / 390); // Seitenverhältnis
+        const logoW = 46;
+        const logoH = logoW * (70 / 390);
         pdf.addImage(logoData, "PNG", 10, 8, logoW, logoH);
       }
     } catch (_) {}
@@ -449,7 +433,6 @@ async function exportProfessionalPdf() {
     pdf.text(pageTitle, 60, 20);
   }
 
-  // COVER
   await addHeader("Interessenprofil nach Gardner-Intelligenzen");
 
   pdf.setDrawColor(220);
@@ -468,7 +451,6 @@ async function exportProfessionalPdf() {
   pdf.text(`Klasse: ${cls}`, 80, 47);
   pdf.text(`Datum: ${dateStr}`, 140, 47);
 
-  // Erklärung
   pdf.setFontSize(10);
   pdf.setTextColor(75, 85, 99);
   const expl =
@@ -476,15 +458,13 @@ async function exportProfessionalPdf() {
     "Es zeigt eine Momentaufnahme deiner Interessen entlang der Gardner-Intelligenzen (Skala 0–100).";
   pdf.text(pdf.splitTextToSize(expl, pageW - 20), 10, 66);
 
-  // Spider-Web zentral (Canvas -> PNG)
+  // Spider zentral
   const radarCanvas = document.getElementById("radar");
   const radarImg = radarCanvas.toDataURL("image/png");
 
   pdf.setDrawColor(229, 231, 235);
   pdf.setFillColor(249, 250, 251);
   pdf.roundedRect(10, 74, pageW - 20, 96, 3, 3, "FD");
-
-  // zentral platzieren
   pdf.addImage(radarImg, "PNG", 18, 78, pageW - 36, 88);
 
   // Projektwahlen
@@ -502,7 +482,7 @@ async function exportProfessionalPdf() {
   pdf.setTextColor(55, 65, 81);
   pdf.text((picksSorted.length ? picksSorted : ["—"]), 14, 190);
 
-  // Norm-Tabelle (in Spider-Reihenfolge)
+  // Norm-Tabelle
   const rows = INTELLIGENCES.map((i) => [i.label, `${scores.norm[i.key]}`]);
   pdf.autoTable({
     startY: 218,
@@ -514,7 +494,7 @@ async function exportProfessionalPdf() {
     margin: { left: 10, right: 10 },
   });
 
-  // APPENDIX
+  // Anhang
   pdf.addPage();
   await addHeader("Anhang – Antworten nach Bereich");
 
@@ -529,8 +509,6 @@ async function exportProfessionalPdf() {
 
   for (const intel of INTELLIGENCES) {
     const qs = QUESTIONS.filter((q) => q.intel === intel.key);
-
-    // PDF: keine Emojis (sonst Kauderwelsch), daher Safe-Labels
     const body = qs.map((q) => [q.text, getAnswerLabelSafe(q.id), String(getAnswerValue(q.id))]);
 
     if (cursorY > pageH - 60) {
@@ -539,7 +517,6 @@ async function exportProfessionalPdf() {
       cursorY = 34;
     }
 
-    // Abschnittstitel + Icon
     pdf.setTextColor(17, 24, 39);
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(12);
@@ -582,7 +559,6 @@ async function exportProfessionalPdf() {
 
   pdf.save(`Denkschule_Interessenprofil_${cls}_${name}.pdf`);
 
-  // Exportmodus aus -> UI wieder mit Icons
   __EXPORTING_PDF__ = false;
   await renderRadar(scores);
 }
@@ -622,7 +598,6 @@ btnPdf.addEventListener("click", async () => {
     return;
   }
 
-  // ensure result visible (optional)
   const scores = calcScores();
   await showResult(scores);
   await exportProfessionalPdf();
@@ -638,7 +613,7 @@ btnReset.addEventListener("click", () => {
   if (chart) chart.destroy();
   chart = null;
 
-  renderQuestionsRandom(); // neue Random-Reihenfolge
+  renderQuestionsRandom();
   window.scrollTo({ top: 0, behavior: "smooth" });
 });
 
