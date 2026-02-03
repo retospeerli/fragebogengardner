@@ -1,4 +1,4 @@
-// Reihenfolge im Radar (Start 12 Uhr, im Uhrzeigersinn):
+// Reihenfolge im Spider-Web (Start 12 Uhr, im Uhrzeigersinn):
 // logisch -> räumlich -> körper -> musikalisch -> interpersonal -> sprachlich -> intrapersonal -> existenziell -> naturbezogen
 const INTELLIGENCES = [
   { key: "logisch",    label: "Logisch-mathematisch",        icon: "assets/icons/logisch.png" },
@@ -12,7 +12,7 @@ const INTELLIGENCES = [
   { key: "natur",      label: "Naturbezogen",                icon: "assets/icons/natur.png" },
 ];
 
-// Aussagen (6 pro Bereich als Start; du kannst jederzeit erweitern)
+// Aussagen (6 pro Bereich als Start; erweiterbar)
 const QUESTIONS = [
   // logisch
   { id:"l1", intel:"logisch", text:"Ich rechne gerne (plus, minus, mal, geteilt)." },
@@ -87,7 +87,6 @@ const QUESTIONS = [
   { id:"n6", intel:"natur", text:"Ich mag Wasser- oder Waldforschung." },
 ];
 
-// Projekte: intels = beteiligte Intelligenzen (mind. 3)
 const PROJECTS = [
   { id:"pr_robotik", name:"Roboter bauen & programmieren", tags:["Scratch/MakeCode/LEGO Spike/Arduino"], intels:["logisch","raeumlich","koerper","inter"] },
   { id:"pr_ki", name:"KI-Labor (Modelle trainieren & einbauen)", tags:["Teachable Machine/PictoBlox"], intels:["logisch","sprachlich","raeumlich","intra"] },
