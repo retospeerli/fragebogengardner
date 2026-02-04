@@ -281,7 +281,7 @@ async function buildAxisPresentation(scores) {
 }
 
 // ---------------------------------------------------------
-// Radar Plugin: NUR Labels + Werte (Labels exakt auf echter Achse!)
+// Radar Plugin: NUR Labels + Werte (Labels exakt auf echter Achse)
 // ---------------------------------------------------------
 function buildRadarPlugin(axisLabels, axisIcons) {
   return {
@@ -291,25 +291,22 @@ function buildRadarPlugin(axisLabels, axisIcons) {
       const scale = chart.scales.r;
       if (!scale) return;
 
-      // 2) Aussenlabels (exakt auf der echten Achse) + Icons (nur UI)
+      // Aussenlabels
       ctx.save();
       ctx.font = "700 14px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
       ctx.textBaseline = "middle";
 
-      const pushOut = 22; // Abstand nach aussen (px)
+      const pushOut = 22;
       const iconSize = 16;
       const iconGap = 7;
 
       for (let i = 0; i < axisLabels.length; i++) {
-        // Punkt auf der *echten* Radar-Achse bei max
         const pt = scale.getPointPositionForValue(i, scale.max);
 
-        // Richtung Zentrum -> Achse
         const dx = pt.x - scale.xCenter;
         const dy = pt.y - scale.yCenter;
         const len = Math.hypot(dx, dy) || 1;
 
-        // Label noch etwas nach aussen schieben
         const x = pt.x + (dx / len) * pushOut;
         const y = pt.y + (dy / len) * pushOut;
 
@@ -329,7 +326,7 @@ function buildRadarPlugin(axisLabels, axisIcons) {
       }
       ctx.restore();
 
-      // 3) Innenwerte (farbig, exakt auf dem Punkt)
+      // Innenwerte
       const dataset = chart.data.datasets[0].data;
 
       ctx.save();
@@ -379,7 +376,7 @@ function buildRadarPlugin(axisLabels, axisIcons) {
 }
 
 // ---------------------------------------------------------
-// Radar rendern – Achsen/SpiderWeb sind Chart.js-eigen (stimmig)
+// Radar rendern
 // ---------------------------------------------------------
 async function renderRadar(axisLabels, axisValues, axisIcons) {
   const canvas = document.getElementById("radar");
@@ -407,14 +404,13 @@ async function renderRadar(axisLabels, axisValues, axisIcons) {
       maintainAspectRatio: false,
       animation: { duration: 0 },
 
-      // Platz, damit Labels nie abgeschnitten werden
       layout: { padding: { top: 72, right: 92, bottom: 72, left: 92 } },
 
       scales: {
         r: {
           min: 0,
           max: 100,
-          startAngle: -90, // Index 0 = 12 Uhr
+          startAngle: -90,
 
           grid: {
             circular: true,
@@ -422,7 +418,6 @@ async function renderRadar(axisLabels, axisValues, axisIcons) {
             color: "rgba(0,0,0,0.08)"
           },
 
-          // echte Achsen: dick & farbig
           angleLines: {
             display: true,
             lineWidth: () => 2.6,
@@ -488,9 +483,9 @@ async function showResult(scores) {
   resultCard.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// ---------------------------------------------------------
-// PDF Export – kleineres Layout, damit Seite 1 passt
-// ---------------------------------------------------------
+// =========================================================
+// PDF Export – farbig + sortiert + Antwortfarben
+// =========================================================
 async function exportProfessionalPdf() {
   const name = document.getElementById("studentName").value.trim() || "OhneName";
   const cls = document.getElementById("studentClass").value.trim() || "Klasse";
@@ -499,8 +494,9 @@ async function exportProfessionalPdf() {
   const scores = calcScores();
   const { axisLabels, axisValues, axisPairs } = await buildAxisPresentation(scores);
 
+  // PDF: keine Icons im Radar
   __EXPORTING_PDF__ = true;
-  await renderRadar(axisLabels, axisValues, null); // keine Icons im PDF
+  await renderRadar(axisLabels, axisValues, null);
   await new Promise((r) => requestAnimationFrame(() => r()));
 
   const picksSorted = scores.picks
@@ -517,6 +513,21 @@ async function exportProfessionalPdf() {
   const pageW = pdf.internal.pageSize.getWidth();
   const pageH = pdf.internal.pageSize.getHeight();
 
+  // ---------- helpers ----------
+  const toRgb = (hex) => {
+    const h = hex.replace("#", "");
+    return [
+      parseInt(h.slice(0, 2), 16),
+      parseInt(h.slice(2, 4), 16),
+      parseInt(h.slice(4, 6), 16),
+    ];
+  };
+
+  const colorForKey = (key) => {
+    const idx = AXIS_KEYS.indexOf(key);
+    return AXIS_COLORS[Math.max(0, idx)];
+  };
+
   async function addHeader(pageTitle) {
     pdf.setFillColor(245, 247, 250);
     pdf.rect(0, 0, pageW, 26, "F");
@@ -530,7 +541,7 @@ async function exportProfessionalPdf() {
         c.getContext("2d").drawImage(logoImg, 0, 0);
 
         const logoW = 46;
-        const logoH = logoW * (70 / 390); // 390x70 proportional
+        const logoH = logoW * (70 / 390); // 390x70 proportional, nicht quetschen
         pdf.addImage(c.toDataURL("image/png"), "PNG", 10, 8, logoW, logoH);
       }
     } catch (_) {}
@@ -546,9 +557,10 @@ async function exportProfessionalPdf() {
     pdf.text(pageTitle, 60, 20);
   }
 
+  // ---------- Seite 1 ----------
   await addHeader("Interessenprofil nach Gardner-Intelligenzen");
 
-  // kleiner: Schüler*in Box
+  // kleinere Schüler*in Box
   pdf.setDrawColor(220);
   pdf.setFillColor(255, 255, 255);
   pdf.roundedRect(10, 32, pageW - 20, 18, 3, 3, "FD");
@@ -586,7 +598,7 @@ async function exportProfessionalPdf() {
   pdf.roundedRect(10, 64, pageW - 20, 86, 3, 3, "FD");
   pdf.addImage(radarImg, "PNG", 18, 66, pageW - 36, 82);
 
-  // kleiner: Projekte Box
+  // kleinere Projekte Box
   pdf.setDrawColor(229, 231, 235);
   pdf.setFillColor(255, 255, 255);
   pdf.roundedRect(10, 152, pageW - 20, 30, 3, 3, "FD");
@@ -601,19 +613,35 @@ async function exportProfessionalPdf() {
   pdf.setTextColor(55, 65, 81);
   pdf.text((picksSorted.length ? picksSorted : ["—"]), 14, 167);
 
-  // Tabelle: 9 Zeilen müssen auf Seite 1 passen
-  const rows = axisPairs.map((x) => [x.label, String(x.value)]);
+  // ÜBERSICHTSTABELLE: sortiert absteigend + farbig pro Zeile
+  const sortedAxis = axisPairs
+    .slice()
+    .sort((a, b) => Number(b.value) - Number(a.value));
+
+  const rowsMeta = sortedAxis.map((x) => ({ key: x.key, label: x.label, value: x.value }));
+
   pdf.autoTable({
     startY: 186,
-    head: [["Gardner-Bereich (Reihenfolge wie Spider-Web)", "Wert (0–100)"]],
-    body: rows,
+    head: [["Auswertung (absteigend)", "Wert (0–100)"]],
+    body: rowsMeta.map((r) => [r.label, String(r.value)]),
     theme: "grid",
     styles: { font: "helvetica", fontSize: 8.5, cellPadding: 1.6 },
     headStyles: { fillColor: [17, 24, 39], textColor: 255 },
     margin: { left: 10, right: 10 },
+    didParseCell: function (data) {
+      if (data.section !== "body") return;
+
+      const rowIdx = data.row.index;
+      const key = rowsMeta[rowIdx]?.key;
+      if (!key) return;
+
+      const rgb = toRgb(colorForKey(key));
+      data.cell.styles.textColor = rgb;
+      data.cell.styles.fontStyle = "bold";
+    },
   });
 
-  // Anhang
+  // ---------- Anhang ----------
   pdf.addPage();
   await addHeader("Anhang – Antworten nach Bereich");
 
@@ -633,7 +661,10 @@ async function exportProfessionalPdf() {
 
   for (const x of axisPairs) {
     const qs = QUESTIONS.filter((q) => q.intel === x.key);
-    const body = qs.map((q) => [q.text, getAnswerLabelSafe(q.id), String(getAnswerValue(q.id))]);
+    const body = qs.map((q) => {
+      const pts = getAnswerValue(q.id);
+      return [q.text, getAnswerLabelSafe(q.id), String(pts)];
+    });
 
     if (cursorY > pageH - 60) {
       pdf.addPage();
@@ -641,7 +672,9 @@ async function exportProfessionalPdf() {
       cursorY = 34;
     }
 
-    pdf.setTextColor(17, 24, 39);
+    // Bereichstitel in Radar-Farbe
+    const titleRgb = toRgb(colorForKey(x.key));
+    pdf.setTextColor(titleRgb[0], titleRgb[1], titleRgb[2]);
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(12);
 
@@ -676,9 +709,26 @@ async function exportProfessionalPdf() {
         2: { cellWidth: 14, halign: "center" },
       },
       margin: { left: 10, right: 10 },
+      didParseCell: function (data) {
+        if (data.section !== "body") return;
+
+        const row = data.row.raw; // ["text","++","3"]
+        const pts = Number(row?.[2]);
+
+        if (pts === 3) {
+          data.cell.styles.textColor = [22, 163, 74]; // grün
+          data.cell.styles.fontStyle = "bold";
+        } else if (pts === 0) {
+          data.cell.styles.textColor = [153, 27, 27]; // dunkelrot
+          data.cell.styles.fontStyle = "bold";
+        }
+      },
     });
 
     cursorY = pdf.lastAutoTable.finalY + 10;
+
+    // Reset auf Standardfarbe
+    pdf.setTextColor(17, 24, 39);
   }
 
   pdf.save(`Denkschule_Interessenprofil_${cls}_${name}.pdf`);
